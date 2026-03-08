@@ -10,11 +10,6 @@ on:
       - 'pyproject.toml'
   pull_request:
     branches: [main]
-    paths:
-      - 'plugin/**'
-      - 'tests/**'
-      - 'requirements*.txt'
-      - 'pyproject.toml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
