@@ -40,12 +40,12 @@ repos:
 
   # Ansible
   - repo: https://github.com/ansible/ansible-lint
-    rev: v25.1.3
+    rev: v26.3.0
     hooks:
       - id: ansible-lint
         files: ^examples/deployment/ansible/
         args: [--offline]
-        additional_dependencies: ["ansible-core>=2.17,<2.19"]
+        additional_dependencies: ["ansible-core>=2.20"]
 
   # Markdown
   - repo: https://github.com/igorshubovych/markdownlint-cli
