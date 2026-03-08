@@ -14,6 +14,10 @@ on:
       - 'plugin/**'
       - 'requirements.txt'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   docker-build:
     name: Build Docker image

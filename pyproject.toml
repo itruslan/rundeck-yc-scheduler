@@ -3,6 +3,10 @@ name = "rundeck-yc-scheduler"
 version = "0.1.0"
 requires-python = ">=3.11"
 
+[tool.pytest.ini_options]
+pythonpath = ["plugin/contents", "tests"]
+testpaths = ["tests"]
+
 [tool.ruff]
 line-length = 100
 
