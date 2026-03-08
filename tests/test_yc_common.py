@@ -1,13 +1,11 @@
 """Tests for yc_common helpers."""
 
 import base64
-import json
 from unittest.mock import MagicMock
 
 import pytest
-
 import yc_common
-from conftest import SA_KEY, SA_KEY_B64
+from conftest import SA_KEY_B64
 
 
 class TestSdkFromKeyB64:

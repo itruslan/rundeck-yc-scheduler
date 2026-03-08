@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 
 import grpc
 import pytest
-
 import start
 from conftest import rpc_error
 from yc_common import (
@@ -13,13 +12,10 @@ from yc_common import (
     COMPUTE_STOPPING,
     K8S_RUNNING,
     K8S_STOPPED,
-    K8S_STOPPING,
     NLB_ACTIVE,
     NLB_STOPPED,
-    NLB_STOPPING,
     PG_RUNNING,
     PG_STOPPED,
-    PG_STOPPING,
 )
 
 

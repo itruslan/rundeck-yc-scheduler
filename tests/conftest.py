@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 import grpc
 import pytest
 
-
 SA_KEY = {"id": "key-id", "service_account_id": "sa-id", "private_key": "private-key-data"}
 SA_KEY_B64 = base64.b64encode(json.dumps(SA_KEY).encode()).decode()
 

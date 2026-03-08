@@ -1,10 +1,7 @@
 """Tests for node_source.py."""
 
 import json
-import sys
 from unittest.mock import MagicMock
-
-import pytest
 
 import node_source
 
