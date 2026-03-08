@@ -1,0 +1,6 @@
+---
+- name: Restart rundeck container
+  community.docker.docker_container:
+    name: rundeck
+    state: started
+    restart: true

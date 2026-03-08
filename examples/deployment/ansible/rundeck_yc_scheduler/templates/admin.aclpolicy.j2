@@ -1,0 +1,32 @@
+description: Admin, all access.
+context:
+  project: '.*'
+for:
+  resource:
+    - allow: '*'
+  adhoc:
+    - allow: '*'
+  job:
+    - allow: '*'
+  node:
+    - allow: '*'
+by:
+  group: admin
+  username: admin
+
+---
+description: Admin, all access.
+context:
+  application: 'rundeck'
+for:
+  resource:
+    - allow: '*'
+  project:
+    - allow: '*'
+  project_acl:
+    - allow: '*'
+  storage:
+    - allow: '*'
+by:
+  group: admin
+  username: admin

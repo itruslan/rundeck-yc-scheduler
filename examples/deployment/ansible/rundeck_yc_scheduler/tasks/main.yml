@@ -1,0 +1,56 @@
+---
+- name: Ensure deploy directory exists
+  ansible.builtin.file:
+    path: "{{ rundeck_yc_scheduler_deploy_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Template tokens.properties
+  ansible.builtin.template:
+    src: tokens.properties.j2
+    dest: "{{ rundeck_yc_scheduler_deploy_path }}/tokens.properties"
+    mode: "0644"
+  notify: Restart rundeck container
+
+- name: Template admin.aclpolicy
+  ansible.builtin.template:
+    src: admin.aclpolicy.j2
+    dest: "{{ rundeck_yc_scheduler_deploy_path }}/admin.aclpolicy"
+    mode: "0644"
+  notify: Restart rundeck container
+
+- name: Remove container and volumes (clean deploy)
+  when: rundeck_yc_scheduler_clean
+  block:
+    - name: Stop and remove container
+      community.docker.docker_container:
+        name: rundeck
+        state: absent
+
+    - name: Remove data volume
+      community.docker.docker_volume:
+        name: rundeck_data
+        state: absent
+
+- name: Run rundeck container
+  community.docker.docker_container:
+    name: rundeck
+    image: "{{ rundeck_yc_scheduler_image }}"
+    state: started
+    restart_policy: unless-stopped
+    ports:
+      - "{{ rundeck_yc_scheduler_port }}:4440"
+    env: >-
+      {{
+        {
+          'RUNDECK_GRAILS_URL': rundeck_yc_scheduler_url,
+          'RUNDECK_SERVER_ADDRESS': '0.0.0.0',
+          'RUNDECK_FEATURE_REPOSITORY_ENABLED': 'false',
+          'RUNDECK_API_TOKENS_DURATION_MAX': '0',
+          'RUNDECK_TOKENS_FILE': '/home/rundeck/server/config/tokens.properties',
+        } | combine(rundeck_yc_scheduler_env)
+      }}
+    volumes:
+      - "rundeck_data:/home/rundeck/server/data"
+      - "{{ rundeck_yc_scheduler_deploy_path }}/tokens.properties:/home/rundeck/server/config/tokens.properties:ro"
+      - "{{ rundeck_yc_scheduler_deploy_path }}/admin.aclpolicy:/home/rundeck/etc/admin.aclpolicy:ro"

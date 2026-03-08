@@ -1,0 +1,11 @@
+profile: basic
+offline: true
+
+project_dir: examples/deployment/ansible
+
+exclude_paths:
+  - .venv/
+  - .ansible/
+
+warn_list:
+  - yaml[line-length]

@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars and fill in the values.
+#
+# To get a base64-encoded SA key:
+#   base64 -i sa-key.json | tr -d '\n'
+
+rundeck_url        = "http://localhost:4440"
+rundeck_auth_token = "your-api-token-here"
+
+yc_sa_key_production = "base64-encoded-sa-key"
+yc_sa_key_staging    = "base64-encoded-sa-key"

@@ -1,0 +1,42 @@
+# Rundeck Job Definition: Stop All Resources
+#
+# Stops all resource types at once.
+
+- defaultTab: nodes
+  executionEnabled: true
+  loglevel: INFO
+  name: Stop All
+  nodeFilterEditable: true
+  nodefilters:
+    dispatch:
+      excludePrecedence: true
+      keepgoing: true
+      rankAttribute: stop_order
+      rankOrder: ascending
+      successOnEmptyNodeFilter: false
+      threadcount: "10"
+    filter: "resource_type: .*"
+    # Exclude nodes by label (optional):
+    # filterExclude: "labels:no_autoshutdown: true"
+  nodesSelectedByDefault: true
+  scheduleEnabled: false
+  # Uncomment to enable scheduled execution:
+  # scheduleEnabled: true
+  # schedule:
+  #   month: "*"
+  #   time:
+  #     hour: "21"
+  #     minute: "00"
+  #     seconds: "0"
+  #   weekday:
+  #     day: MON,TUE,WED,THU,FRI
+  #   year: "*"
+  # timeZone: Europe/Moscow
+  sequence:
+    commands:
+      - nodeStep: true
+        type: yc-stop
+        configuration:
+          yc_sa_key: keys/project/${job.project}/yc-sa-key
+    keepgoing: false
+    strategy: node-first

@@ -1,0 +1,15 @@
+# Replace <project-name> with your actual Rundeck project name.
+# Example: if your project is called "production", use:
+#   path: 'keys/project/production/.*'
+#   urn: 'project:production'
+
+description: Allow project to read SA key from Key Storage for yc-scheduler plugins.
+context:
+  application: rundeck
+for:
+  storage:
+    - match:
+        path: 'keys/project/<project-name>/.*'
+      allow: [read]
+by:
+  urn: 'project:<project-name>'

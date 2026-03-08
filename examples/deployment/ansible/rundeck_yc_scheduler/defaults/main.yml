@@ -1,0 +1,29 @@
+---
+# Docker image
+rundeck_yc_scheduler_image: "rundeck-yc-scheduler:5.19.0"
+
+# Deploy path on remote host (for config files)
+rundeck_yc_scheduler_deploy_path: /opt/rundeck-yc-scheduler
+
+# Rundeck port
+rundeck_yc_scheduler_port: 4440
+
+# Rundeck URL (used in RUNDECK_GRAILS_URL)
+rundeck_yc_scheduler_url: "http://{{ ansible_host }}:{{ rundeck_yc_scheduler_port }}"
+
+# Extra environment variables for the container (e.g., database config)
+# rundeck_yc_scheduler_env:
+#   RUNDECK_DATABASE_DRIVER: org.postgresql.Driver
+#   RUNDECK_DATABASE_URL: "jdbc:postgresql://db:5432/rundeck"
+#   RUNDECK_DATABASE_USERNAME: rundeck
+#   RUNDECK_DATABASE_PASSWORD: secret
+#   RUNDECK_STORAGE_PROVIDER: db
+#   RUNDECK_PROJECT_STORAGE_TYPE: db
+rundeck_yc_scheduler_env: {}
+
+# Remove container and volumes before deploy
+rundeck_yc_scheduler_clean: false
+
+# Health check
+rundeck_yc_scheduler_health_retries: 24
+rundeck_yc_scheduler_health_delay: 5

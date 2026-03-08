@@ -1,0 +1,66 @@
+name: Yandex Cloud Scheduler
+version: 1.0.0
+rundeckPluginVersion: 1.2
+author: Ruslan Gadzhiev
+date: 2026-03-08
+providers:
+  - name: yc-node-source
+    title: Yandex Cloud Node Source
+    service: ResourceModelSource
+    plugin-type: script
+    script-interpreter: python3
+    script-file: node_source.py
+    resource-format: resourcejson
+    config:
+      - type: String
+        name: folder_id
+        title: YC Folder ID
+        description: Yandex Cloud folder to list resources from.
+        required: true
+        scope: Instance
+      - type: String
+        name: yc_sa_key
+        title: YC SA Key (Key Storage Path)
+        description: Path to the base64-encoded service account JSON key in Key Storage.
+        required: false
+        scope: Instance
+        renderingOptions:
+          selectionAccessor: STORAGE_PATH
+          storage-path-root: "keys"
+          valueConversion: "STORAGE_PATH_AUTOMATIC_READ"
+
+  - name: yc-start
+    title: Yandex Cloud Start Resource
+    service: WorkflowNodeStep
+    plugin-type: script
+    script-interpreter: python3
+    script-file: start.py
+    script-args: "--type ${node.resource_type} --id ${node.resource_id}"
+    config:
+      - type: String
+        name: yc_sa_key
+        title: YC SA Key (Key Storage Path)
+        description: Path to the base64-encoded service account JSON key in Key Storage.
+        required: true
+        renderingOptions:
+          selectionAccessor: STORAGE_PATH
+          storage-path-root: "keys"
+          valueConversion: "STORAGE_PATH_AUTOMATIC_READ"
+
+  - name: yc-stop
+    title: Yandex Cloud Stop Resource
+    service: WorkflowNodeStep
+    plugin-type: script
+    script-interpreter: python3
+    script-file: stop.py
+    script-args: "--type ${node.resource_type} --id ${node.resource_id}"
+    config:
+      - type: String
+        name: yc_sa_key
+        title: YC SA Key (Key Storage Path)
+        description: Path to the base64-encoded service account JSON key in Key Storage.
+        required: true
+        renderingOptions:
+          selectionAccessor: STORAGE_PATH
+          storage-path-root: "keys"
+          valueConversion: "STORAGE_PATH_AUTOMATIC_READ"

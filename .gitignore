@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Terragrunt
+.terragrunt-cache/
+
+# Ansible
+.ansible/
+
+# IDE / OS
+.vscode/
+.DS_Store
+*.log

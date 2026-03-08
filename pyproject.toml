@@ -1,0 +1,11 @@
+[project]
+name = "rundeck-yc-scheduler"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]  # pycodestyle, pyflakes, isort
+ignore = ["E501"]          # line length — handled by ruff format
