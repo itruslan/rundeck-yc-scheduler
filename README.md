@@ -72,24 +72,12 @@ Choose one:
 
 ## Components
 
-```text
-├── Dockerfile                    # Custom Rundeck image (base + Python + SDK + plugin)
-├── requirements.txt              # Python dependencies (yandexcloud SDK)
-├── plugin/
-│   ├── plugin.yaml               # Rundeck ScriptPlugin descriptor (3 providers)
-│   └── contents/
-│       ├── yc_common.py          # Shared SDK utilities (auth, wait_for_operation)
-│       ├── node_source.py        # yc-node-source: discover YC resources as nodes
-│       ├── stop.py               # yc-stop: stop a resource by type and ID
-│       └── start.py              # yc-start: start a resource by type and ID
-└── examples/
-    ├── deployment/
-    │   ├── docker/               # Docker deployment guide
-    │   └── ansible/              # Ansible role for remote deployment
-    └── configuration/
-        ├── terraform-rundeck-yc-scheduler/  # Terraform module
-        └── manual-rundeck/                  # Manual setup guide + job YAML definitions
-```
+| Path | Description |
+| --- | --- |
+| `Dockerfile` | Custom Rundeck image — base + Python + yandexcloud SDK + plugin |
+| `plugin/` | Rundeck ScriptPlugin: `yc-node-source`, `yc-start`, `yc-stop` |
+| `examples/deployment/` | Docker and Ansible deployment guides |
+| `examples/configuration/` | Terraform module and manual Rundeck setup |
 
 ## Authentication
 
@@ -114,6 +102,10 @@ uv pip install -r requirements.txt
 
 # Pre-commit hooks
 pre-commit install
+
+# Tests
+uv pip install -r requirements-dev.txt
+pytest
 
 # Build
 docker build -t rundeck-yc-scheduler:5.19.0 .
