@@ -23,15 +23,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect Python changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            python:
+              - 'plugin/**'
+              - 'tests/**'
+              - 'requirements*.txt'
+              - 'pyproject.toml'
+
       - name: Set up Python
+        if: steps.changes.outputs.python == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.14'
 
       - name: Install dependencies
+        if: steps.changes.outputs.python == 'true'
         run: |
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
       - name: Run tests
+        if: steps.changes.outputs.python == 'true'
         run: pytest
