@@ -47,6 +47,14 @@ repos:
         args: [--offline]
         additional_dependencies: ["ansible-core>=2.20"]
 
+  # Python: security
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        files: ^plugin/
+        args: [-c, pyproject.toml]
+
   # Markdown
   - repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.44.0
