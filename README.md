@@ -7,12 +7,18 @@ Scheduled start/stop of Yandex Cloud resources via [Rundeck](https://www.rundeck
 
 ## Supported resource types
 
-| Type | Stop / Start |
-|------|:---:|
-| `compute-instance` | ✅ |
-| `managed-postgresql` | ✅ |
-| `managed-kubernetes` | ✅ |
-| `network-load-balancer` | ✅ |
+- `compute-instance`
+- `managed-postgresql`
+- `managed-kubernetes`
+- `network-load-balancer`
+
+## Planned
+
+- `application-load-balancer`
+- `managed-valkey`
+- `managed-kafka`
+- `managed-mysql`
+- `managed-opensearch`
 
 ## Quick start
 
