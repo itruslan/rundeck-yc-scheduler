@@ -35,17 +35,17 @@ All operations are idempotent — resources already in the target state are skip
 
 ## Supported resource types
 
-| Type | Status |
-| --- | --- |
-| `compute-instance` | ✅ done |
-| `managed-postgresql` | ✅ done |
-| `managed-kubernetes` | ✅ done |
-| `network-load-balancer` | ✅ done |
-| `application-load-balancer` | 🔜 planned |
-| `managed-valkey` | 🔜 planned |
-| `managed-kafka` | 🔜 planned |
-| `managed-mysql` | 🔜 planned |
-| `managed-opensearch` | 🔜 planned |
+| Type | Status | Since |
+| --- | --- | --- |
+| `compute-instance` | ✅ done | 0.1.0 |
+| `managed-postgresql` | ✅ done | 0.1.0 |
+| `managed-kubernetes` | ✅ done | 0.1.0 |
+| `network-load-balancer` | ✅ done | 0.1.0 |
+| `application-load-balancer` | 🔜 planned | — |
+| `managed-valkey` | 🔜 planned | — |
+| `managed-kafka` | 🔜 planned | — |
+| `managed-mysql` | 🔜 planned | — |
+| `managed-opensearch` | 🔜 planned | — |
 
 ## Quick start
 
