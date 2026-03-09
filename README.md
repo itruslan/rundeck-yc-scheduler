@@ -66,6 +66,13 @@ See [Docker deployment guide](examples/deployment/docker/) or [Ansible role](exa
 - [Terraform module](examples/configuration/terraform-rundeck-yc-scheduler/) — recommended
 - [Manual setup via UI](examples/configuration/manual-rundeck/) — step-by-step guide
 
+## Ideas & future work
+
+- **OAuth for Rundeck** — bundle [rundeck-oauth](https://github.com/geraldhansen/rundeck-oauth) into the image as a ready-to-use example with Yandex ID / corporate SSO
+- **More resource types** — application-load-balancer, managed-valkey, managed-kafka, managed-mysql, managed-opensearch (see table above)
+- **Notification step plugin** — post to Slack / Telegram when a scheduled job stops or starts a resource
+- **Dry-run mode** — log what would be stopped/started without actually calling the API, useful for auditing schedules
+
 ## Development
 
 ```bash
