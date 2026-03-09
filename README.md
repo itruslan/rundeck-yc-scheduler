@@ -1,5 +1,8 @@
 # rundeck-yc-scheduler
 
+[![Build](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/build.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/build.yml)
+[![E2E Tests](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e.yml)
+
 Custom [Rundeck](https://www.rundeck.com/) Docker image with a built-in plugin for scheduled start/stop of [Yandex Cloud](https://yandex.cloud/) resources. Save money by automatically shutting down non-production environments outside business hours.
 
 ## Features

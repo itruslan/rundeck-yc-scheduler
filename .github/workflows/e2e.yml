@@ -201,6 +201,17 @@ jobs:
         if: always()
         run: docker rm -f rundeck || true
 
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: compute-instance" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance  | \`$INSTANCE_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance ID | \`${{ steps.resource.outputs.instance_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
   # -------------------------------------------------------------------------
   # managed-postgresql
   # -------------------------------------------------------------------------
@@ -397,6 +408,17 @@ jobs:
         if: always()
         run: docker rm -f rundeck || true
 
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: managed-postgresql" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster   | \`$CLUSTER_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster ID | \`${{ steps.resource.outputs.cluster_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
   # -------------------------------------------------------------------------
   # k8s-cluster
   # -------------------------------------------------------------------------
@@ -587,6 +609,17 @@ jobs:
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: k8s-cluster" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster   | \`$CLUSTER_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster ID | \`${{ steps.resource.outputs.cluster_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
   # -------------------------------------------------------------------------
   # network-load-balancer  (requires a VM as NLB target)
@@ -828,3 +861,14 @@ jobs:
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: network-load-balancer" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NLB       | \`$NLB_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NLB ID    | \`${{ steps.nlb.outputs.nlb_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
