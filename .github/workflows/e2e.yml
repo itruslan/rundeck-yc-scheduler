@@ -56,7 +56,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
@@ -91,9 +91,10 @@ jobs:
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
@@ -203,7 +204,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
@@ -238,9 +239,10 @@ jobs:
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
@@ -359,7 +361,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
@@ -394,9 +396,10 @@ jobs:
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
@@ -537,7 +540,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
@@ -572,9 +575,10 @@ jobs:
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
