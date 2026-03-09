@@ -39,7 +39,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
       INSTANCE_NAME: e2e-${{ github.run_id }}-ci-vm
@@ -62,36 +61,44 @@ jobs:
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
             --arg sa_key "$SA_KEY_B64" \
@@ -187,7 +194,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
       CLUSTER_NAME: e2e-${{ github.run_id }}-pg-cluster
@@ -210,36 +216,44 @@ jobs:
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
             --arg sa_key "$SA_KEY_B64" \
@@ -343,7 +357,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
       CLUSTER_NAME: e2e-${{ github.run_id }}-k8s-cluster
@@ -367,36 +380,44 @@ jobs:
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
             --arg sa_key "$SA_KEY_B64" \
@@ -521,7 +542,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
       VM_NAME: e2e-${{ github.run_id }}-nlb-vm
@@ -546,36 +566,44 @@ jobs:
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
             --arg sa_key "$SA_KEY_B64" \
