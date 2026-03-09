@@ -323,6 +323,23 @@ jobs:
             --resource-id "${{ steps.resource.outputs.cluster_id }}" \
             --timeout 180
 
+      - name: Create manual backup and wait for completion
+        run: |
+          yc managed-postgresql cluster backup --id "${{ steps.resource.outputs.cluster_id }}"
+          for i in $(seq 1 30); do
+            STATUS=$(yc managed-postgresql backup list \
+              --cluster-id "${{ steps.resource.outputs.cluster_id }}" \
+              --format json | jq -r '[.[] | select(.status=="DONE")][0].status // "NONE"')
+            echo "[$i/30] backup status: $STATUS"
+            if [ "$STATUS" = "DONE" ]; then
+              echo "Backup ready"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for backup"
+          exit 1
+
       - name: Run stop job
         run: |
           uv run tests/e2e/rundeck.py run-job \
