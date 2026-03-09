@@ -85,3 +85,9 @@ pre-commit install
 pytest          # unit tests
 docker build .  # build image
 ```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+The Docker image is built on [Rundeck](https://www.rundeck.com/), which is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
