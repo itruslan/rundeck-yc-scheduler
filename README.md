@@ -72,6 +72,7 @@ See [Docker deployment guide](examples/deployment/docker/) or [Ansible role](exa
 - **More resource types** — application-load-balancer, managed-valkey, managed-kafka, managed-mysql, managed-opensearch (see table above)
 - **Notification step plugin** — post to Slack / Telegram when a scheduled job stops or starts a resource
 - **Dry-run mode** — log what would be stopped/started without actually calling the API, useful for auditing schedules
+- **Configurable operation timeout** — expose `operation_timeout` as a Rundeck job option so users can tune wait time per job without rebuilding the image
 
 ## Development
 
