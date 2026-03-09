@@ -37,10 +37,10 @@ All operations are idempotent — resources already in the target state are skip
 
 | Type | Status | Since |
 | --- | --- | --- |
-| `compute-instance` | ✅ done | 0.1.0 |
-| `managed-postgresql` | ✅ done | 0.1.0 |
-| `managed-kubernetes` | ✅ done | 0.1.0 |
-| `network-load-balancer` | ✅ done | 0.1.0 |
+| `compute-instance` | ✅ done | 1.0.0 |
+| `managed-postgresql` | ✅ done | 1.0.0 |
+| `managed-kubernetes` | ✅ done | 1.0.0 |
+| `network-load-balancer` | ✅ done | 1.0.0 |
 | `application-load-balancer` | 🔜 planned | — |
 | `managed-valkey` | 🔜 planned | — |
 | `managed-kafka` | 🔜 planned | — |
