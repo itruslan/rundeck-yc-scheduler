@@ -339,8 +339,8 @@ jobs:
           yc managed-postgresql cluster backup --id "${{ steps.resource.outputs.cluster_id }}"
           for i in $(seq 1 30); do
             STATUS=$(yc managed-postgresql backup list \
-              --cluster-id "${{ steps.resource.outputs.cluster_id }}" \
-              --format json | jq -r '[.[] | select(.status=="DONE")][0].status // "NONE"')
+              --format json | jq -r --arg id "${{ steps.resource.outputs.cluster_id }}" \
+              '[.[] | select(.cluster_id==$id and .status=="DONE")][0].status // "NONE"')
             echo "[$i/30] backup status: $STATUS"
             if [ "$STATUS" = "DONE" ]; then
               echo "Backup ready"
