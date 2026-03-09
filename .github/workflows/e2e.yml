@@ -431,7 +431,6 @@ jobs:
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
       CLUSTER_NAME: ${{ github.event.repository.name }}-managed-kubernetes-${{ github.run_id }}
-      SA_NAME: ${{ github.event.repository.name }}-managed-kubernetes-sa-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -497,7 +496,7 @@ jobs:
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
-      - name: Create K8s service account and cluster
+      - name: Create K8s cluster
         id: resource
         run: |
           SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
@@ -506,16 +505,8 @@ jobs:
             | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
           echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
 
-          yc iam service-account create --name "$SA_NAME" --folder-id "$FOLDER_ID" --labels "for-test=true"
-          SA_ID=$(yc iam service-account get --name "$SA_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
-          echo "sa_id=$SA_ID" >> "$GITHUB_OUTPUT"
-          echo "SA ID: $SA_ID"
-
-          for role in k8s.clusters.agent load-balancer.admin; do
-            yc resource-manager folder add-access-binding "$FOLDER_ID" \
-              --role "$role" \
-              --subject "serviceAccount:$SA_ID"
-          done
+          SA_ID=$(jq -r '.service_account_id' /tmp/sa-key.json)
+          echo "Using CI SA: $SA_ID"
 
           yc managed-kubernetes cluster create \
             --name "$CLUSTER_NAME" \
@@ -591,7 +582,7 @@ jobs:
         if: always()
         run: yc managed-kubernetes cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
 
-      - name: Cleanup - verify cluster deleted and remove SA
+      - name: Cleanup - verify cluster deleted
         if: always()
         run: |
           for i in $(seq 1 90); do
@@ -604,7 +595,6 @@ jobs:
           done
           yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1 \
             && { echo "ERROR: Cluster not deleted after 15 minutes"; exit 1; } || true
-          yc iam service-account delete --id "${{ steps.resource.outputs.sa_id }}" || true
 
       - name: Cleanup - stop Rundeck
         if: always()
