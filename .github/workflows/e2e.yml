@@ -41,7 +41,7 @@ jobs:
       RUNDECK_URL: http://localhost:4440
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      INSTANCE_NAME: e2e-${{ github.run_id }}-ci-vm
+      INSTANCE_NAME: ${{ github.event.repository.name }}-compute-instance-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -183,6 +183,20 @@ jobs:
         if: always()
         run: yc compute instance delete --id "${{ steps.resource.outputs.instance_id }}" --async || true
 
+      - name: Cleanup - verify instance deleted
+        if: always()
+        run: |
+          for i in $(seq 1 18); do
+            if ! yc compute instance get --id "${{ steps.resource.outputs.instance_id }}" --format json > /dev/null 2>&1; then
+              echo "Instance deleted"
+              exit 0
+            fi
+            echo "[$i/18] still exists..."
+            sleep 10
+          done
+          echo "ERROR: Instance not deleted after 3 minutes"
+          exit 1
+
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
@@ -198,7 +212,7 @@ jobs:
       RUNDECK_URL: http://localhost:4440
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      CLUSTER_NAME: e2e-${{ github.run_id }}-pg-cluster
+      CLUSTER_NAME: ${{ github.event.repository.name }}-postgresql-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -348,6 +362,20 @@ jobs:
         if: always()
         run: yc managed-postgresql cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
 
+      - name: Cleanup - verify cluster deleted
+        if: always()
+        run: |
+          for i in $(seq 1 30); do
+            if ! yc managed-postgresql cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1; then
+              echo "Cluster deleted"
+              exit 0
+            fi
+            echo "[$i/30] still exists..."
+            sleep 10
+          done
+          echo "ERROR: Cluster not deleted after 5 minutes"
+          exit 1
+
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
@@ -363,8 +391,8 @@ jobs:
       RUNDECK_URL: http://localhost:4440
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      CLUSTER_NAME: e2e-${{ github.run_id }}-k8s-cluster
-      SA_NAME: e2e-${{ github.run_id }}-k8s-sa
+      CLUSTER_NAME: ${{ github.event.repository.name }}-k8s-cluster-${{ github.run_id }}
+      SA_NAME: ${{ github.event.repository.name }}-k8s-sa-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -524,15 +552,19 @@ jobs:
         if: always()
         run: yc managed-kubernetes cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
 
-      - name: Cleanup - wait for cluster deletion and remove SA
+      - name: Cleanup - verify cluster deleted and remove SA
         if: always()
         run: |
-          for i in $(seq 1 60); do
-            STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "NOT_FOUND")
-            echo "[$i/60] cluster status: $STATUS"
-            if [ "$STATUS" = "NOT_FOUND" ] || [ -z "$STATUS" ]; then break; fi
+          for i in $(seq 1 90); do
+            if ! yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1; then
+              echo "Cluster deleted"
+              break
+            fi
+            echo "[$i/90] still exists..."
             sleep 10
           done
+          yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1 \
+            && { echo "ERROR: Cluster not deleted after 15 minutes"; exit 1; } || true
           yc iam service-account delete --id "${{ steps.resource.outputs.sa_id }}" || true
 
       - name: Cleanup - stop Rundeck
@@ -550,9 +582,9 @@ jobs:
       RUNDECK_URL: http://localhost:4440
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      VM_NAME: e2e-${{ github.run_id }}-nlb-vm
-      TG_NAME: e2e-${{ github.run_id }}-nlb-tg
-      NLB_NAME: e2e-${{ github.run_id }}-nlb
+      VM_NAME: ${{ github.event.repository.name }}-nlb-vm-${{ github.run_id }}
+      TG_NAME: ${{ github.event.repository.name }}-nlb-tg-${{ github.run_id }}
+      NLB_NAME: ${{ github.event.repository.name }}-nlb-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -749,9 +781,32 @@ jobs:
           yc load-balancer network-load-balancer delete --id "${{ steps.nlb.outputs.nlb_id }}" || true
           yc load-balancer target-group delete --id "${{ steps.nlb.outputs.tg_id }}" || true
 
+      - name: Cleanup - verify NLB deleted
+        if: always()
+        run: |
+          if yc load-balancer network-load-balancer get --id "${{ steps.nlb.outputs.nlb_id }}" --format json > /dev/null 2>&1; then
+            echo "ERROR: NLB still exists"
+            exit 1
+          fi
+          echo "NLB deleted"
+
       - name: Cleanup - delete VM
         if: always()
         run: yc compute instance delete --id "${{ steps.vm.outputs.vm_id }}" --async || true
+
+      - name: Cleanup - verify VM deleted
+        if: always()
+        run: |
+          for i in $(seq 1 18); do
+            if ! yc compute instance get --id "${{ steps.vm.outputs.vm_id }}" --format json > /dev/null 2>&1; then
+              echo "VM deleted"
+              exit 0
+            fi
+            echo "[$i/18] still exists..."
+            sleep 10
+          done
+          echo "ERROR: VM not deleted after 3 minutes"
+          exit 1
 
       - name: Cleanup - stop Rundeck
         if: always()
