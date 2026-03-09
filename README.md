@@ -19,9 +19,9 @@ Scheduled start/stop of [Yandex Cloud](https://yandex.cloud/) resources via [Run
                      │  │ lists resources │───▶│ calls YC API│  │
                      │  │ as Rundeck nodes│    │ per node    │  │
                      │  └────────┬────────┘    └──────┬──────┘  │
-                     └───────────┼───────────────────┼──────────┘
-                                 │                   │
-                                 ▼                   ▼
+                     └───────────┼────────────────────┼─────────┘
+                                 │                    │
+                                 ▼                    ▼
                             YC List API       YC Stop/Start API
 ```
 
@@ -73,6 +73,7 @@ See [Docker deployment guide](examples/deployment/docker/) or [Ansible role](exa
 - **Notification step plugin** — post to Slack / Telegram when a scheduled job stops or starts a resource
 - **Dry-run mode** — log what would be stopped/started without actually calling the API, useful for auditing schedules
 - **Configurable operation timeout** — expose `operation_timeout` as a Rundeck job option so users can tune wait time per job without rebuilding the image
+- **Kubernetes deployment example** — add `examples/deployment/kubernetes/` with Deployment, Service, ConfigMap, Secret, and PVC manifests alongside the existing Docker and Ansible examples
 
 ## Development
 
