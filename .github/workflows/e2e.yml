@@ -56,7 +56,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
@@ -203,7 +203,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
@@ -359,7 +359,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
@@ -537,7 +537,7 @@ jobs:
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" | base64 -di > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
