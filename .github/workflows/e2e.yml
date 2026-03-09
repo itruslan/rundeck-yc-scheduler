@@ -15,8 +15,8 @@ on:
         description: 'Test managed PostgreSQL (~5 min)'
         type: boolean
         default: false
-      k8s_cluster:
-        description: 'Test K8s clusters (~15 min)'
+      managed_kubernetes:
+        description: 'Test Managed Kubernetes (~15 min)'
         type: boolean
         default: false
       network_load_balancer:
@@ -39,10 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      INSTANCE_NAME: e2e-${{ github.run_id }}-ci-vm
+      INSTANCE_NAME: ${{ github.event.repository.name }}-compute-instance-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -50,50 +49,61 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - uses: hashicorp/setup-terraform@v3
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
@@ -173,9 +183,34 @@ jobs:
         if: always()
         run: yc compute instance delete --id "${{ steps.resource.outputs.instance_id }}" --async || true
 
+      - name: Cleanup - verify instance deleted
+        if: always()
+        run: |
+          for i in $(seq 1 18); do
+            if ! yc compute instance get --id "${{ steps.resource.outputs.instance_id }}" --format json > /dev/null 2>&1; then
+              echo "Instance deleted"
+              exit 0
+            fi
+            echo "[$i/18] still exists..."
+            sleep 10
+          done
+          echo "ERROR: Instance not deleted after 3 minutes"
+          exit 1
+
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: compute-instance" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance  | \`$INSTANCE_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance ID | \`${{ steps.resource.outputs.instance_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
   # -------------------------------------------------------------------------
   # managed-postgresql
@@ -186,10 +221,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      CLUSTER_NAME: e2e-${{ github.run_id }}-pg-cluster
+      CLUSTER_NAME: ${{ github.event.repository.name }}-managed-postgresql-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -197,50 +231,61 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - uses: hashicorp/setup-terraform@v3
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
@@ -289,6 +334,23 @@ jobs:
             --resource-id "${{ steps.resource.outputs.cluster_id }}" \
             --timeout 180
 
+      - name: Create manual backup and wait for completion
+        run: |
+          yc managed-postgresql cluster backup --id "${{ steps.resource.outputs.cluster_id }}"
+          for i in $(seq 1 30); do
+            STATUS=$(yc managed-postgresql backup list \
+              --format json | jq -r --arg id "${{ steps.resource.outputs.cluster_id }}" \
+              '[.[] | select(.source_cluster_id==$id and .status=="DONE")][0].status // "NONE"')
+            echo "[$i/30] backup status: $STATUS"
+            if [ "$STATUS" = "DONE" ]; then
+              echo "Backup ready"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for backup"
+          exit 1
+
       - name: Run stop job
         run: |
           uv run tests/e2e/rundeck.py run-job \
@@ -328,24 +390,47 @@ jobs:
         if: always()
         run: yc managed-postgresql cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
 
+      - name: Cleanup - verify cluster deleted
+        if: always()
+        run: |
+          for i in $(seq 1 30); do
+            if ! yc managed-postgresql cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1; then
+              echo "Cluster deleted"
+              exit 0
+            fi
+            echo "[$i/30] still exists..."
+            sleep 10
+          done
+          echo "ERROR: Cluster not deleted after 5 minutes"
+          exit 1
+
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
 
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: managed-postgresql" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster   | \`$CLUSTER_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster ID | \`${{ steps.resource.outputs.cluster_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
   # -------------------------------------------------------------------------
   # k8s-cluster
   # -------------------------------------------------------------------------
-  test-k8s-cluster:
-    if: ${{ inputs.k8s_cluster }}
-    name: k8s-cluster
+  test-managed-kubernetes:
+    if: ${{ inputs.managed_kubernetes }}
+    name: managed-kubernetes
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      CLUSTER_NAME: e2e-${{ github.run_id }}-k8s-cluster
-      SA_NAME: e2e-${{ github.run_id }}-k8s-sa
+      CLUSTER_NAME: ${{ github.event.repository.name }}-managed-kubernetes-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -353,54 +438,65 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - uses: hashicorp/setup-terraform@v3
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
-      - name: Create K8s service account and cluster
+      - name: Create K8s cluster
         id: resource
         run: |
           SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
@@ -409,16 +505,8 @@ jobs:
             | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
           echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
 
-          yc iam service-account create --name "$SA_NAME" --folder-id "$FOLDER_ID" --labels "for-test=true"
-          SA_ID=$(yc iam service-account get --name "$SA_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
-          echo "sa_id=$SA_ID" >> "$GITHUB_OUTPUT"
-          echo "SA ID: $SA_ID"
-
-          for role in k8s.clusters.agent load-balancer.admin; do
-            yc resource-manager folder add-access-binding "$FOLDER_ID" \
-              --role "$role" \
-              --subject "serviceAccount:$SA_ID"
-          done
+          SA_ID=$(jq -r '.service_account_id' /tmp/sa-key.json)
+          echo "Using CI SA: $SA_ID"
 
           yc managed-kubernetes cluster create \
             --name "$CLUSTER_NAME" \
@@ -466,9 +554,14 @@ jobs:
 
       - name: Verify STOPPED in YC
         run: |
-          STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
-          echo "Status: $STATUS"
-          [ "$STATUS" = "STOPPED" ] || { echo "Expected STOPPED, got $STATUS"; exit 1; }
+          for i in $(seq 1 40); do
+            STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+            echo "[$i/40] status: $STATUS"
+            if [ "$STATUS" = "STOPPED" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Timed out waiting for STOPPED"
+          exit 1
 
       - name: Run start job
         run: |
@@ -477,7 +570,7 @@ jobs:
             --group e2e/managed-kubernetes \
             --name Start \
             --resource-id "${{ steps.resource.outputs.cluster_id }}" \
-            --timeout 600
+            --timeout 900
 
       - name: Verify RUNNING in YC
         run: |
@@ -494,20 +587,34 @@ jobs:
         if: always()
         run: yc managed-kubernetes cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
 
-      - name: Cleanup - wait for cluster deletion and remove SA
+      - name: Cleanup - verify cluster deleted
         if: always()
         run: |
-          for i in $(seq 1 60); do
-            STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "NOT_FOUND")
-            echo "[$i/60] cluster status: $STATUS"
-            if [ "$STATUS" = "NOT_FOUND" ] || [ -z "$STATUS" ]; then break; fi
+          for i in $(seq 1 90); do
+            if ! yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1; then
+              echo "Cluster deleted"
+              break
+            fi
+            echo "[$i/90] still exists..."
             sleep 10
           done
-          yc iam service-account delete --id "${{ steps.resource.outputs.sa_id }}" || true
+          yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1 \
+            && { echo "ERROR: Cluster not deleted after 15 minutes"; exit 1; } || true
 
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: managed-kubernetes" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster   | \`$CLUSTER_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster ID | \`${{ steps.resource.outputs.cluster_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
   # -------------------------------------------------------------------------
   # network-load-balancer  (requires a VM as NLB target)
@@ -518,12 +625,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
-      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      VM_NAME: e2e-${{ github.run_id }}-nlb-vm
-      TG_NAME: e2e-${{ github.run_id }}-nlb-tg
-      NLB_NAME: e2e-${{ github.run_id }}-nlb
+      VM_NAME: ${{ github.event.repository.name }}-nlb-vm-${{ github.run_id }}
+      TG_NAME: ${{ github.event.repository.name }}-nlb-tg-${{ github.run_id }}
+      NLB_NAME: ${{ github.event.repository.name }}-nlb-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -531,50 +637,61 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
           YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
-          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          echo "$YC_SA_KEY" > /tmp/sa-key.json
           yc config set service-account-key /tmp/sa-key.json
           yc config set folder-id "$FOLDER_ID"
 
       - name: Start Rundeck
         run: |
-          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
           docker run -d --name rundeck \
             -p 4440:4440 \
-            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
             ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
 
-      - name: Wait for Rundeck healthcheck
+      - name: Wait for Rundeck and create API token
         run: |
           for i in $(seq 1 60); do
-            if curl -sf "$RUNDECK_URL/api/48/system/info" \
-                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
-                -H "Accept: application/json" > /dev/null 2>&1; then
+            STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+              --max-redirs 0 \
+              -X POST \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "j_username=admin&j_password=admin" \
+              "$RUNDECK_URL/j_security_check" 2>/dev/null || echo "000")
+            echo "Attempt $i/60, login status: $STATUS"
+            if [ "$STATUS" = "302" ]; then
               echo "Rundeck ready"
-              exit 0
+              break
             fi
-            echo "Attempt $i/60..."
             sleep 5
           done
-          docker logs rundeck
-          exit 1
+          [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+          TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+            -X POST \
+            "$RUNDECK_URL/api/57/tokens/admin" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d '{"roles":"admin"}' \
+            | jq -r '.token')
+          echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - uses: hashicorp/setup-terraform@v3
 
       - name: Terraform apply
-        env:
-          TF_VAR_rundeck_url: http://localhost:4440
-          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
-          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
+          SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+          export TF_VAR_rundeck_url="$RUNDECK_URL"
+          export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
           export TF_VAR_projects=$(jq -n \
             --arg folder_id "$FOLDER_ID" \
-            --arg sa_key "$E2E_SA_KEY" \
+            --arg sa_key "$SA_KEY_B64" \
             '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
           terraform apply -auto-approve -input=false
 
@@ -709,10 +826,44 @@ jobs:
           yc load-balancer network-load-balancer delete --id "${{ steps.nlb.outputs.nlb_id }}" || true
           yc load-balancer target-group delete --id "${{ steps.nlb.outputs.tg_id }}" || true
 
+      - name: Cleanup - verify NLB deleted
+        if: always()
+        run: |
+          if yc load-balancer network-load-balancer get --id "${{ steps.nlb.outputs.nlb_id }}" --format json > /dev/null 2>&1; then
+            echo "ERROR: NLB still exists"
+            exit 1
+          fi
+          echo "NLB deleted"
+
       - name: Cleanup - delete VM
         if: always()
         run: yc compute instance delete --id "${{ steps.vm.outputs.vm_id }}" --async || true
 
+      - name: Cleanup - verify VM deleted
+        if: always()
+        run: |
+          for i in $(seq 1 18); do
+            if ! yc compute instance get --id "${{ steps.vm.outputs.vm_id }}" --format json > /dev/null 2>&1; then
+              echo "VM deleted"
+              exit 0
+            fi
+            echo "[$i/18] still exists..."
+            sleep 10
+          done
+          echo "ERROR: VM not deleted after 3 minutes"
+          exit 1
+
       - name: Cleanup - stop Rundeck
         if: always()
         run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: network-load-balancer" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NLB       | \`$NLB_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NLB ID    | \`${{ steps.nlb.outputs.nlb_id }}\` |" >> "$GITHUB_STEP_SUMMARY"

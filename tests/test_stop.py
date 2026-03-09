@@ -139,7 +139,7 @@ class TestStopK8sCluster:
         stop.stop_k8s_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=900)
 
     def test_not_found_skips(self, mock_sdk):
         svc = MagicMock()

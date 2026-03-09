@@ -1,112 +1,86 @@
 # rundeck-yc-scheduler
 
-Custom [Rundeck](https://www.rundeck.com/) Docker image with a built-in plugin for scheduled start/stop of [Yandex Cloud](https://yandex.cloud/) resources. Save money by automatically shutting down non-production environments outside business hours.
+[![Build](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/build.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/build.yml)
+[![E2E Tests](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e.yml)
 
-## Features
+Scheduled start/stop of [Yandex Cloud](https://yandex.cloud/) resources via [Rundeck](https://www.rundeck.com/). Cut costs on non-production environments without changing your infrastructure.
 
-- **Custom Rundeck image** — based on `rundeck/rundeck`, pre-loaded with `yandexcloud` SDK and three built-in plugins: `yc-node-source`, `yc-start`, `yc-stop`
-- **Dynamic node discovery** — the plugin queries a YC folder via API and returns resources as Rundeck nodes
-- **Scheduled start/stop** — cron-based jobs to stop resources in the evening and start them in the morning
-- **Idempotent operations** — scripts check resource status before acting, safe to run multiple times
-- **Terraform module** — manage projects, jobs, schedules, and ACL policies as code
-- **Per-resource-type control** — independent schedules and execution order for each resource type
-- **Exclude by label** — add `no_autoshutdown: "true"` to any resource to skip it
-
-## How It Works
+## How it works
 
 ```text
-┌───────────────────────────────────────────────────────────┐
-│  Rundeck                                                  │
-│                                                           │
-│   Scheduler (cron)                                        │
-│       │                                                   │
-│       ▼                                                   │
-│   ┌──────────────────────┐     ┌──────────────────────┐   │
-│   │  yc-node-source      │     │  yc-stop / yc-start  │   │
-│   │  (ResourceModel      │────▶│  (WorkflowNodeStep   │   │
-│   │   Source plugin)     │     │   plugins)           │   │
-│   │  Discovers resources │     │  Stops/starts each   │   │
-│   │  as Rundeck nodes    │     │  node via YC API     │   │
-│   └──────────┬───────────┘     └──────────┬───────────┘   │
-│              │                            │               │
-└──────────────┼────────────────────────────┼───────────────┘
-               │                            │
-               ▼                            ▼
-        ┌──────────────┐            ┌──────────────────┐
-        │  Yandex Cloud│            │  Yandex Cloud    │
-        │  List API    │            │  Stop/Start API  │
-        └──────────────┘            └──────────────────┘
+                     ┌──────────────────────────────────────────┐
+                     │  Rundeck                                 │
+                     │                                          │
+                     │  cron schedule                           │
+                     │       │                                  │
+                     │       ▼                                  │
+                     │  yc-node-source          yc-stop/start   │
+                     │  ┌─────────────────┐    ┌─────────────┐  │
+                     │  │ lists resources │───▶│ calls YC API│  │
+                     │  │ as Rundeck nodes│    │ per node    │  │
+                     │  └────────┬────────┘    └──────┬──────┘  │
+                     └───────────┼───────────────────┼──────────┘
+                                 │                   │
+                                 ▼                   ▼
+                            YC List API       YC Stop/Start API
 ```
 
-1. **yc-node-source** queries a YC folder and returns all supported resources as Rundeck nodes with attributes (`resource_type`, `resource_id`, `status`, labels)
-2. **Scheduled Jobs** run against discovered nodes, executing `yc-stop` or `yc-start` plugin per node
-3. **Plugins** are idempotent — they check the current status and skip resources already in the desired state
+Resources in a YC folder are discovered via `yc-node-source` and exposed as Rundeck nodes. You then create scheduled jobs using `yc-stop` / `yc-start` that target:
 
-## Supported Resource Types
+- a single resource
+- a group of resources filtered by type or YC label
+- an entire YC folder
 
-| Type | Description | Status |
+All operations are idempotent — resources already in the target state are skipped. Each job executes per node, with optional parallelism configured at the job level. Label-based node filters let you exclude specific resources from a job without changing infrastructure (e.g. tag a resource `no_shutdown: "true"` and filter it out).
+
+## Supported resource types
+
+| Type | Status | Since |
 | --- | --- | --- |
-| `compute-instance` | Virtual machines | Tested |
-| `managed-postgresql` | Managed PostgreSQL clusters | Tested |
-| `managed-kubernetes` | Managed Kubernetes clusters | Tested |
-| `network-load-balancer` | Network load balancers | Implemented |
+| `compute-instance` | ✅ done | 0.1.0 |
+| `managed-postgresql` | ✅ done | 0.1.0 |
+| `managed-kubernetes` | ✅ done | 0.1.0 |
+| `network-load-balancer` | ✅ done | 0.1.0 |
+| `application-load-balancer` | 🔜 planned | — |
+| `managed-valkey` | 🔜 planned | — |
+| `managed-kafka` | 🔜 planned | — |
+| `managed-mysql` | 🔜 planned | — |
+| `managed-opensearch` | 🔜 planned | — |
 
-## Quick Start
+## Quick start
 
-### 1. Build the image
+### 1. Pull or build the image
 
 ```bash
-docker build -t rundeck-yc-scheduler:5.19.0 .
+docker pull ghcr.io/itruslan/rundeck-yc-scheduler:latest
+# or build locally
+docker build -t rundeck-yc-scheduler .
 ```
 
 ### 2. Run Rundeck
 
-See [Docker deployment guide](examples/deployment/docker/) for `docker run` and Docker Compose options.
+See [Docker deployment guide](examples/deployment/docker/) or [Ansible role](examples/deployment/ansible/).
 
 ### 3. Configure projects and jobs
 
-Choose one:
+- [Terraform module](examples/configuration/terraform-rundeck-yc-scheduler/) — recommended
+- [Manual setup via UI](examples/configuration/manual-rundeck/) — step-by-step guide
 
-- [Terraform module](examples/configuration/terraform-rundeck-yc-scheduler/) — recommended, manages projects, jobs, schedules and ACL as code
-- [Manual setup via Rundeck UI](examples/configuration/manual-rundeck/) — step-by-step guide through the web interface
+## Ideas & future work
 
-## Components
-
-| Path | Description |
-| --- | --- |
-| `Dockerfile` | Custom Rundeck image — base + Python + yandexcloud SDK + plugin |
-| `plugin/` | Rundeck ScriptPlugin: `yc-node-source`, `yc-start`, `yc-stop` |
-| `examples/deployment/` | Docker and Ansible deployment guides |
-| `examples/configuration/` | Terraform module and manual Rundeck setup |
-
-## Authentication
-
-The image uses Yandex Cloud Service Account keys for authentication.
-
-**Prepare a key:**
-
-```bash
-yc iam key create --service-account-name <sa-name> --output sa-key.json
-base64 -i sa-key.json | tr -d '\n'
-```
-
-The service account needs permissions to start/stop the managed resources in the target folder.
-See [Yandex Cloud role reference](https://yandex.cloud/en/docs/iam/roles-reference) for details on roles and bindings.
+- **OAuth for Rundeck** — bundle [rundeck-oauth](https://github.com/geraldhansen/rundeck-oauth) into the image as a ready-to-use example with Yandex ID / corporate SSO
+- **More resource types** — application-load-balancer, managed-valkey, managed-kafka, managed-mysql, managed-opensearch (see table above)
+- **Notification step plugin** — post to Slack / Telegram when a scheduled job stops or starts a resource
+- **Dry-run mode** — log what would be stopped/started without actually calling the API, useful for auditing schedules
+- **Configurable operation timeout** — expose `operation_timeout` as a Rundeck job option so users can tune wait time per job without rebuilding the image
 
 ## Development
 
 ```bash
-# Python (for IDE support and linting)
 uv venv && source .venv/bin/activate
-uv pip install -r requirements.txt
-
-# Pre-commit hooks
+uv pip install -r requirements.txt -r requirements-dev.txt
 pre-commit install
 
-# Tests
-uv pip install -r requirements-dev.txt
-pytest
-
-# Build
-docker build -t rundeck-yc-scheduler:5.19.0 .
+pytest          # unit tests
+docker build .  # build image
 ```

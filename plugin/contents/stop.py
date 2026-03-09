@@ -120,7 +120,7 @@ def stop_k8s_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Stopping managed-kubernetes cluster {cluster_id}...")
     op = svc.Stop(k8s_cluster_service_pb2.StopClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=900)
     print(f"Cluster {cluster_id} stopped.")
 
 
