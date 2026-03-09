@@ -92,7 +92,7 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
 
       - name: Terraform apply
         run: |
@@ -274,7 +274,7 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
 
       - name: Terraform apply
         run: |
@@ -481,7 +481,7 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
 
       - name: Terraform apply
         run: |
@@ -680,7 +680,7 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
 
       - name: Terraform apply
         run: |
