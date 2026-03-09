@@ -1,0 +1,718 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to test'
+        type: string
+        default: 'staging'
+      compute_instance:
+        description: 'Test compute instances'
+        type: boolean
+        default: true
+      managed_postgresql:
+        description: 'Test managed PostgreSQL (~5 min)'
+        type: boolean
+        default: false
+      k8s_cluster:
+        description: 'Test K8s clusters (~15 min)'
+        type: boolean
+        default: false
+      network_load_balancer:
+        description: 'Test Network Load Balancers'
+        type: boolean
+        default: false
+
+# ---------------------------------------------------------------------------
+# Shared steps (referenced inline — GHA does not support YAML anchors,
+# so common logic is kept in scripts or repeated explicitly per job).
+# ---------------------------------------------------------------------------
+
+jobs:
+  # -------------------------------------------------------------------------
+  # compute-instance
+  # -------------------------------------------------------------------------
+  test-compute-instance:
+    if: ${{ inputs.compute_instance }}
+    name: compute-instance
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      INSTANCE_NAME: e2e-${{ github.run_id }}-ci-vm
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install yc CLI
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+
+      - name: Configure yc CLI
+        env:
+          YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          yc config set service-account-key /tmp/sa-key.json
+          yc config set folder-id "$FOLDER_ID"
+
+      - name: Start Rundeck
+        run: |
+          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
+          docker run -d --name rundeck \
+            -p 4440:4440 \
+            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
+            ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
+
+      - name: Wait for Rundeck healthcheck
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf "$RUNDECK_URL/api/48/system/info" \
+                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
+                -H "Accept: application/json" > /dev/null 2>&1; then
+              echo "Rundeck ready"
+              exit 0
+            fi
+            echo "Attempt $i/60..."
+            sleep 5
+          done
+          docker logs rundeck
+          exit 1
+
+      - name: Terraform apply
+        env:
+          TF_VAR_rundeck_url: http://localhost:4440
+          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
+          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          cd examples/configuration/terraform-rundeck-yc-scheduler
+          terraform init -input=false
+          export TF_VAR_projects=$(jq -n \
+            --arg folder_id "$FOLDER_ID" \
+            --arg sa_key "$E2E_SA_KEY" \
+            '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
+          terraform apply -auto-approve -input=false
+
+      - name: Create compute instance
+        id: resource
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          echo "Using subnet: $SUBNET_ID"
+          yc compute instance create \
+            --name "$INSTANCE_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --zone "$ZONE" \
+            --platform-id standard-v3 \
+            --cores 2 \
+            --memory 1GB \
+            --core-fraction 20 \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-hdd" \
+            --network-interface "subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+          INSTANCE_ID=$(yc compute instance get --name "$INSTANCE_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "Instance ID: $INSTANCE_ID"
+
+      - name: Wait for instance RUNNING
+        run: |
+          for i in $(seq 1 30); do
+            STATUS=$(yc compute instance get --id "${{ steps.resource.outputs.instance_id }}" --format json | jq -r '.status')
+            echo "[$i/30] status: $STATUS"
+            if [ "$STATUS" = "RUNNING" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Timed out waiting for RUNNING"
+          exit 1
+
+      - name: Wait for node in Rundeck
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.resource.outputs.instance_id }}"
+
+      - name: Run stop job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/compute-instance \
+            --name Stop \
+            --resource-id "${{ steps.resource.outputs.instance_id }}"
+
+      - name: Verify STOPPED in YC
+        run: |
+          STATUS=$(yc compute instance get --id "${{ steps.resource.outputs.instance_id }}" --format json | jq -r '.status')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "STOPPED" ] || { echo "Expected STOPPED, got $STATUS"; exit 1; }
+
+      - name: Run start job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/compute-instance \
+            --name Start \
+            --resource-id "${{ steps.resource.outputs.instance_id }}"
+
+      - name: Verify RUNNING in YC
+        run: |
+          for i in $(seq 1 12); do
+            STATUS=$(yc compute instance get --id "${{ steps.resource.outputs.instance_id }}" --format json | jq -r '.status')
+            echo "[$i/12] status: $STATUS"
+            if [ "$STATUS" = "RUNNING" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Timed out waiting for RUNNING"
+          exit 1
+
+      - name: Cleanup - delete instance
+        if: always()
+        run: yc compute instance delete --id "${{ steps.resource.outputs.instance_id }}" --async || true
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+  # -------------------------------------------------------------------------
+  # managed-postgresql
+  # -------------------------------------------------------------------------
+  test-managed-postgresql:
+    if: ${{ inputs.managed_postgresql }}
+    name: managed-postgresql
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      CLUSTER_NAME: e2e-${{ github.run_id }}-pg-cluster
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install yc CLI
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+
+      - name: Configure yc CLI
+        env:
+          YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          yc config set service-account-key /tmp/sa-key.json
+          yc config set folder-id "$FOLDER_ID"
+
+      - name: Start Rundeck
+        run: |
+          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
+          docker run -d --name rundeck \
+            -p 4440:4440 \
+            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
+            ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
+
+      - name: Wait for Rundeck healthcheck
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf "$RUNDECK_URL/api/48/system/info" \
+                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
+                -H "Accept: application/json" > /dev/null 2>&1; then
+              echo "Rundeck ready"
+              exit 0
+            fi
+            echo "Attempt $i/60..."
+            sleep 5
+          done
+          docker logs rundeck
+          exit 1
+
+      - name: Terraform apply
+        env:
+          TF_VAR_rundeck_url: http://localhost:4440
+          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
+          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          cd examples/configuration/terraform-rundeck-yc-scheduler
+          terraform init -input=false
+          export TF_VAR_projects=$(jq -n \
+            --arg folder_id "$FOLDER_ID" \
+            --arg sa_key "$E2E_SA_KEY" \
+            '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
+          terraform apply -auto-approve -input=false
+
+      - name: Create PostgreSQL cluster
+        id: resource
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
+          PG_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(12))")
+          yc managed-postgresql cluster create \
+            --name "$CLUSTER_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --environment prestable \
+            --postgresql-version 16 \
+            --resource-preset b1.medium \
+            --disk-type network-hdd \
+            --disk-size 10 \
+            --host "zone-id=$ZONE,subnet-id=$SUBNET_ID" \
+            --user "name=appuser,password=$PG_PASSWORD" \
+            --database "name=testdb,owner=appuser" \
+            --labels "for-test=true" \
+            --async
+          CLUSTER_ID=$(yc managed-postgresql cluster get --name "$CLUSTER_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "cluster_id=$CLUSTER_ID" >> "$GITHUB_OUTPUT"
+          echo "Cluster ID: $CLUSTER_ID"
+
+      - name: Wait for cluster RUNNING
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(yc managed-postgresql cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+            echo "[$i/60] status: $STATUS"
+            if [ "$STATUS" = "RUNNING" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Timed out waiting for RUNNING"
+          exit 1
+
+      - name: Wait for node in Rundeck
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 180
+
+      - name: Run stop job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-postgresql \
+            --name Stop \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 600
+
+      - name: Verify STOPPED in YC
+        run: |
+          STATUS=$(yc managed-postgresql cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "STOPPED" ] || { echo "Expected STOPPED, got $STATUS"; exit 1; }
+
+      - name: Run start job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-postgresql \
+            --name Start \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 600
+
+      - name: Verify RUNNING in YC
+        run: |
+          for i in $(seq 1 40); do
+            STATUS=$(yc managed-postgresql cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+            echo "[$i/40] status: $STATUS"
+            if [ "$STATUS" = "RUNNING" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Timed out waiting for RUNNING"
+          exit 1
+
+      - name: Cleanup - delete cluster
+        if: always()
+        run: yc managed-postgresql cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+  # -------------------------------------------------------------------------
+  # k8s-cluster
+  # -------------------------------------------------------------------------
+  test-k8s-cluster:
+    if: ${{ inputs.k8s_cluster }}
+    name: k8s-cluster
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      CLUSTER_NAME: e2e-${{ github.run_id }}-k8s-cluster
+      SA_NAME: e2e-${{ github.run_id }}-k8s-sa
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install yc CLI
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+
+      - name: Configure yc CLI
+        env:
+          YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          yc config set service-account-key /tmp/sa-key.json
+          yc config set folder-id "$FOLDER_ID"
+
+      - name: Start Rundeck
+        run: |
+          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
+          docker run -d --name rundeck \
+            -p 4440:4440 \
+            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
+            ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
+
+      - name: Wait for Rundeck healthcheck
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf "$RUNDECK_URL/api/48/system/info" \
+                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
+                -H "Accept: application/json" > /dev/null 2>&1; then
+              echo "Rundeck ready"
+              exit 0
+            fi
+            echo "Attempt $i/60..."
+            sleep 5
+          done
+          docker logs rundeck
+          exit 1
+
+      - name: Terraform apply
+        env:
+          TF_VAR_rundeck_url: http://localhost:4440
+          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
+          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          cd examples/configuration/terraform-rundeck-yc-scheduler
+          terraform init -input=false
+          export TF_VAR_projects=$(jq -n \
+            --arg folder_id "$FOLDER_ID" \
+            --arg sa_key "$E2E_SA_KEY" \
+            '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
+          terraform apply -auto-approve -input=false
+
+      - name: Create K8s service account and cluster
+        id: resource
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
+
+          yc iam service-account create --name "$SA_NAME" --folder-id "$FOLDER_ID" --labels "for-test=true"
+          SA_ID=$(yc iam service-account get --name "$SA_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "sa_id=$SA_ID" >> "$GITHUB_OUTPUT"
+          echo "SA ID: $SA_ID"
+
+          for role in k8s.clusters.agent load-balancer.admin; do
+            yc resource-manager folder add-access-binding "$FOLDER_ID" \
+              --role "$role" \
+              --subject "serviceAccount:$SA_ID"
+          done
+
+          yc managed-kubernetes cluster create \
+            --name "$CLUSTER_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --zone "$ZONE" \
+            --subnet-id "$SUBNET_ID" \
+            --service-account-id "$SA_ID" \
+            --node-service-account-id "$SA_ID" \
+            --service-ipv4-range 10.100.0.0/16 \
+            --cluster-ipv4-range 10.200.0.0/16 \
+            --cilium \
+            --labels "for-test=true" \
+            --async
+          CLUSTER_ID=$(yc managed-kubernetes cluster get --name "$CLUSTER_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "cluster_id=$CLUSTER_ID" >> "$GITHUB_OUTPUT"
+          echo "Cluster ID: $CLUSTER_ID"
+
+      - name: Wait for cluster RUNNING
+        run: |
+          for i in $(seq 1 90); do
+            STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+            echo "[$i/90] status: $STATUS"
+            if [ "$STATUS" = "RUNNING" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Timed out waiting for RUNNING"
+          exit 1
+
+      - name: Wait for node in Rundeck
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 180
+
+      - name: Run stop job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-kubernetes \
+            --name Stop \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 600
+
+      - name: Verify STOPPED in YC
+        run: |
+          STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "STOPPED" ] || { echo "Expected STOPPED, got $STATUS"; exit 1; }
+
+      - name: Run start job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-kubernetes \
+            --name Start \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 600
+
+      - name: Verify RUNNING in YC
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+            echo "[$i/60] status: $STATUS"
+            if [ "$STATUS" = "RUNNING" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Timed out waiting for RUNNING"
+          exit 1
+
+      - name: Cleanup - delete cluster
+        if: always()
+        run: yc managed-kubernetes cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
+
+      - name: Cleanup - wait for cluster deletion and remove SA
+        if: always()
+        run: |
+          for i in $(seq 1 60); do
+            STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json 2>/dev/null | jq -r '.status' 2>/dev/null || echo "NOT_FOUND")
+            echo "[$i/60] cluster status: $STATUS"
+            if [ "$STATUS" = "NOT_FOUND" ] || [ -z "$STATUS" ]; then break; fi
+            sleep 10
+          done
+          yc iam service-account delete --id "${{ steps.resource.outputs.sa_id }}" || true
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+  # -------------------------------------------------------------------------
+  # network-load-balancer  (requires a VM as NLB target)
+  # -------------------------------------------------------------------------
+  test-network-load-balancer:
+    if: ${{ inputs.network_load_balancer }}
+    name: network-load-balancer
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      RUNDECK_TOKEN: ${{ secrets.E2E_RUNDECK_TOKEN }}
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      VM_NAME: e2e-${{ github.run_id }}-nlb-vm
+      TG_NAME: e2e-${{ github.run_id }}-nlb-tg
+      NLB_NAME: e2e-${{ github.run_id }}-nlb
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install yc CLI
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+
+      - name: Configure yc CLI
+        env:
+          YC_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          echo "$YC_SA_KEY" | base64 -d > /tmp/sa-key.json
+          yc config set service-account-key /tmp/sa-key.json
+          yc config set folder-id "$FOLDER_ID"
+
+      - name: Start Rundeck
+        run: |
+          echo "admin.apitoken=$RUNDECK_TOKEN" > /tmp/tokens.properties
+          docker run -d --name rundeck \
+            -p 4440:4440 \
+            -v /tmp/tokens.properties:/home/rundeck/server/config/tokens.properties \
+            ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
+
+      - name: Wait for Rundeck healthcheck
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf "$RUNDECK_URL/api/48/system/info" \
+                -H "X-Rundeck-Auth-Token: $RUNDECK_TOKEN" \
+                -H "Accept: application/json" > /dev/null 2>&1; then
+              echo "Rundeck ready"
+              exit 0
+            fi
+            echo "Attempt $i/60..."
+            sleep 5
+          done
+          docker logs rundeck
+          exit 1
+
+      - name: Terraform apply
+        env:
+          TF_VAR_rundeck_url: http://localhost:4440
+          TF_VAR_rundeck_auth_token: ${{ secrets.E2E_RUNDECK_TOKEN }}
+          E2E_SA_KEY: ${{ secrets.E2E_YC_SA_KEY }}
+        run: |
+          cd examples/configuration/terraform-rundeck-yc-scheduler
+          terraform init -input=false
+          export TF_VAR_projects=$(jq -n \
+            --arg folder_id "$FOLDER_ID" \
+            --arg sa_key "$E2E_SA_KEY" \
+            '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":{"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true},"managed-kubernetes":{"enabled":true},"network-load-balancer":{"enabled":true}}}]')
+          terraform apply -auto-approve -input=false
+
+      - name: Create VM (NLB target)
+        id: vm
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          echo "subnet_id=$SUBNET_ID" >> "$GITHUB_OUTPUT"
+          echo "Using subnet: $SUBNET_ID"
+          yc compute instance create \
+            --name "$VM_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --zone "$ZONE" \
+            --platform-id standard-v3 \
+            --cores 2 \
+            --memory 1GB \
+            --core-fraction 20 \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-hdd" \
+            --network-interface "subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+          VM_ID=$(yc compute instance get --name "$VM_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "vm_id=$VM_ID" >> "$GITHUB_OUTPUT"
+          echo "VM ID: $VM_ID"
+
+      - name: Wait for VM RUNNING and get internal IP
+        id: vm_ip
+        run: |
+          for i in $(seq 1 30); do
+            INFO=$(yc compute instance get --id "${{ steps.vm.outputs.vm_id }}" --format json)
+            STATUS=$(echo "$INFO" | jq -r '.status')
+            IP=$(echo "$INFO" | jq -r '.network_interfaces[0].primary_v4_address.address // empty')
+            echo "[$i/30] status: $STATUS, ip: $IP"
+            if [ "$STATUS" = "RUNNING" ] && [ -n "$IP" ]; then
+              echo "internal_ip=$IP" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for VM RUNNING"
+          exit 1
+
+      - name: Create target group and NLB
+        id: nlb
+        run: |
+          yc load-balancer target-group create \
+            --name "$TG_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --labels "for-test=true"
+          TG_ID=$(yc load-balancer target-group get --name "$TG_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "tg_id=$TG_ID" >> "$GITHUB_OUTPUT"
+
+          yc load-balancer target-group add-targets \
+            --name "$TG_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --target "subnet-id=${{ steps.vm.outputs.subnet_id }},address=${{ steps.vm_ip.outputs.internal_ip }}"
+
+          yc load-balancer network-load-balancer create \
+            --name "$NLB_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --type internal \
+            --labels "for-test=true"
+          NLB_ID=$(yc load-balancer network-load-balancer get --name "$NLB_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "nlb_id=$NLB_ID" >> "$GITHUB_OUTPUT"
+          echo "NLB ID: $NLB_ID"
+
+          yc load-balancer network-load-balancer attach-target-group \
+            --name "$NLB_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --target-group "target-group-id=$TG_ID,healthcheck-name=tcp-22,healthcheck-tcp-port=22"
+
+          yc load-balancer network-load-balancer add-listener \
+            --name "$NLB_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --listener "name=listener-1,port=22,target-port=22,protocol=tcp,internal-subnet-id=${{ steps.vm.outputs.subnet_id }}"
+
+      - name: Wait for NLB ACTIVE
+        run: |
+          for i in $(seq 1 30); do
+            STATUS=$(yc load-balancer network-load-balancer get --id "${{ steps.nlb.outputs.nlb_id }}" --format json | jq -r '.status')
+            echo "[$i/30] status: $STATUS"
+            if [ "$STATUS" = "ACTIVE" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Timed out waiting for ACTIVE"
+          exit 1
+
+      - name: Wait for NLB node in Rundeck
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.nlb.outputs.nlb_id }}" \
+            --timeout 180
+
+      - name: Run stop job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/network-load-balancer \
+            --name Stop \
+            --resource-id "${{ steps.nlb.outputs.nlb_id }}"
+
+      - name: Verify STOPPED in YC
+        run: |
+          STATUS=$(yc load-balancer network-load-balancer get --id "${{ steps.nlb.outputs.nlb_id }}" --format json | jq -r '.status')
+          echo "Status: $STATUS"
+          [ "$STATUS" = "STOPPED" ] || { echo "Expected STOPPED, got $STATUS"; exit 1; }
+
+      - name: Run start job
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/network-load-balancer \
+            --name Start \
+            --resource-id "${{ steps.nlb.outputs.nlb_id }}"
+
+      - name: Verify ACTIVE in YC
+        run: |
+          for i in $(seq 1 12); do
+            STATUS=$(yc load-balancer network-load-balancer get --id "${{ steps.nlb.outputs.nlb_id }}" --format json | jq -r '.status')
+            echo "[$i/12] status: $STATUS"
+            if [ "$STATUS" = "ACTIVE" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Timed out waiting for ACTIVE"
+          exit 1
+
+      - name: Cleanup - delete NLB and target group
+        if: always()
+        run: |
+          yc load-balancer network-load-balancer delete --id "${{ steps.nlb.outputs.nlb_id }}" || true
+          yc load-balancer target-group delete --id "${{ steps.nlb.outputs.tg_id }}" || true
+
+      - name: Cleanup - delete VM
+        if: always()
+        run: yc compute instance delete --id "${{ steps.vm.outputs.vm_id }}" --async || true
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
