@@ -50,7 +50,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
@@ -197,7 +197,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
@@ -353,7 +353,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
@@ -531,7 +531,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install yc CLI
-        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
 
       - name: Configure yc CLI
         env:
