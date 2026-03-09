@@ -554,9 +554,14 @@ jobs:
 
       - name: Verify STOPPED in YC
         run: |
-          STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
-          echo "Status: $STATUS"
-          [ "$STATUS" = "STOPPED" ] || { echo "Expected STOPPED, got $STATUS"; exit 1; }
+          for i in $(seq 1 40); do
+            STATUS=$(yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json | jq -r '.status')
+            echo "[$i/40] status: $STATUS"
+            if [ "$STATUS" = "STOPPED" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "Timed out waiting for STOPPED"
+          exit 1
 
       - name: Run start job
         run: |
@@ -565,7 +570,7 @@ jobs:
             --group e2e/managed-kubernetes \
             --name Start \
             --resource-id "${{ steps.resource.outputs.cluster_id }}" \
-            --timeout 600
+            --timeout 900
 
       - name: Verify RUNNING in YC
         run: |
