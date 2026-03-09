@@ -46,6 +46,9 @@ All operations are idempotent — resources already in the target state are skip
 | `managed-kafka` | 🔜 planned | — |
 | `managed-mysql` | 🔜 planned | — |
 | `managed-opensearch` | 🔜 planned | — |
+| `managed-mongodb` | 🔜 planned | — |
+| `ydb` | 🔜 planned | — |
+| `managed-clickhouse` | 🔜 planned | — |
 
 ## Quick start
 
@@ -68,9 +71,8 @@ See [Docker deployment guide](examples/deployment/docker/) or [Ansible role](exa
 
 ## Ideas & future work
 
-- **OAuth for Rundeck** — bundle [rundeck-oauth](https://github.com/geraldhansen/rundeck-oauth) into the image as a ready-to-use example with Yandex ID / corporate SSO
-- **More resource types** — application-load-balancer, managed-valkey, managed-kafka, managed-mysql, managed-opensearch (see table above)
-- **Notification step plugin** — post to Slack / Telegram when a scheduled job stops or starts a resource
+- **OIDC authentication example** — add a ready-to-use configuration example for SSO via Keycloak, Authentik, or Okta
+- **More resource types** — application-load-balancer, managed-valkey, managed-kafka, managed-mysql, managed-opensearch, managed-mongodb, ydb, managed-clickhouse (see table above)
 - **Dry-run mode** — log what would be stopped/started without actually calling the API, useful for auditing schedules
 - **Configurable operation timeout** — expose `operation_timeout` as a Rundeck job option so users can tune wait time per job without rebuilding the image
 - **Kubernetes deployment example** — add `examples/deployment/kubernetes/` with Deployment, Service, ConfigMap, Secret, and PVC manifests alongside the existing Docker and Ansible examples
