@@ -19,9 +19,9 @@ Scheduled start/stop of [Yandex Cloud](https://yandex.cloud/) resources via [Run
                      │  │ lists resources │───▶│ calls YC API│  │
                      │  │ as Rundeck nodes│    │ per node    │  │
                      │  └────────┬────────┘    └──────┬──────┘  │
-                     └───────────┼───────────────────┼──────────┘
-                                 │                   │
-                                 ▼                   ▼
+                     └───────────┼────────────────────┼─────────┘
+                                 │                    │
+                                 ▼                    ▼
                             YC List API       YC Stop/Start API
 ```
 
