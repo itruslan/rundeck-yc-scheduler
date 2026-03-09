@@ -15,8 +15,8 @@ on:
         description: 'Test managed PostgreSQL (~5 min)'
         type: boolean
         default: false
-      k8s_cluster:
-        description: 'Test K8s clusters (~15 min)'
+      managed_kubernetes:
+        description: 'Test Managed Kubernetes (~15 min)'
         type: boolean
         default: false
       network_load_balancer:
@@ -223,7 +223,7 @@ jobs:
       RUNDECK_URL: http://localhost:4440
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      CLUSTER_NAME: ${{ github.event.repository.name }}-postgresql-${{ github.run_id }}
+      CLUSTER_NAME: ${{ github.event.repository.name }}-managed-postgresql-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -422,16 +422,16 @@ jobs:
   # -------------------------------------------------------------------------
   # k8s-cluster
   # -------------------------------------------------------------------------
-  test-k8s-cluster:
-    if: ${{ inputs.k8s_cluster }}
-    name: k8s-cluster
+  test-managed-kubernetes:
+    if: ${{ inputs.managed_kubernetes }}
+    name: managed-kubernetes
     runs-on: ubuntu-latest
     env:
       RUNDECK_URL: http://localhost:4440
       FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
       ZONE: ru-central1-a
-      CLUSTER_NAME: ${{ github.event.repository.name }}-k8s-cluster-${{ github.run_id }}
-      SA_NAME: ${{ github.event.repository.name }}-k8s-sa-${{ github.run_id }}
+      CLUSTER_NAME: ${{ github.event.repository.name }}-managed-kubernetes-${{ github.run_id }}
+      SA_NAME: ${{ github.event.repository.name }}-managed-kubernetes-sa-${{ github.run_id }}
 
     steps:
       - uses: actions/checkout@v6
@@ -613,7 +613,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## E2E: k8s-cluster" >> "$GITHUB_STEP_SUMMARY"
+          echo "## E2E: managed-kubernetes" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| | |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"

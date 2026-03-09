@@ -31,7 +31,7 @@ Resources in a YC folder are discovered via `yc-node-source` and exposed as Rund
 - a group of resources filtered by type or YC label
 - an entire YC folder
 
-All operations are idempotent — resources already in the target state are skipped. Label-based node filters let you exclude specific resources from a job without changing infrastructure (e.g. tag a resource `no_shutdown: "true"` and filter it out).
+All operations are idempotent — resources already in the target state are skipped. Each job executes per node, with optional parallelism configured at the job level. Label-based node filters let you exclude specific resources from a job without changing infrastructure (e.g. tag a resource `no_shutdown: "true"` and filter it out).
 
 ## Supported resource types
 
