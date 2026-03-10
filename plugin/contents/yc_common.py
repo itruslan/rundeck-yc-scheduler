@@ -49,6 +49,12 @@ NLB_STOPPING = 4
 NLB_STOPPED = 5
 NLB_STARTING = 2
 
+# Managed Kafka cluster (Cluster.Status)
+KAFKA_RUNNING = 2
+KAFKA_STOPPING = 5
+KAFKA_STOPPED = 6
+KAFKA_STARTING = 7
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.

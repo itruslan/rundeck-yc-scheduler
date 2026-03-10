@@ -12,6 +12,9 @@ from yc_common import (
     COMPUTE_STOPPED,
     K8S_RUNNING,
     K8S_STOPPED,
+    KAFKA_RUNNING,
+    KAFKA_STARTING,
+    KAFKA_STOPPED,
     NLB_ACTIVE,
     NLB_STOPPED,
     PG_RUNNING,
@@ -157,6 +160,57 @@ class TestStopK8sCluster:
 
         with pytest.raises(grpc.RpcError):
             stop.stop_k8s_cluster(mock_sdk, "cluster-id")
+
+
+class TestStopKafkaCluster:
+    def test_already_stopped_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=KAFKA_STOPPED)
+        mock_sdk.client.return_value = svc
+
+        stop.stop_kafka_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_not_called()
+
+    def test_stops_running_cluster(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=KAFKA_RUNNING)
+        svc.Stop.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("stop.wait_for_operation")
+
+        stop.stop_kafka_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_called_once()
+        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+
+    def test_stops_starting_cluster(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=KAFKA_STARTING)
+        svc.Stop.return_value = MagicMock(id="op-2")
+        mock_sdk.client.return_value = svc
+        mocker.patch("stop.wait_for_operation")
+
+        stop.stop_kafka_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_called_once()
+
+    def test_not_found_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.NOT_FOUND)
+        mock_sdk.client.return_value = svc
+
+        stop.stop_kafka_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_not_called()
+
+    def test_other_rpc_error_raises(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.UNAVAILABLE)
+        mock_sdk.client.return_value = svc
+
+        with pytest.raises(grpc.RpcError):
+            stop.stop_kafka_cluster(mock_sdk, "cluster-id")
 
 
 class TestStopNlb:
