@@ -10,6 +10,11 @@ on:
       - 'pyproject.toml'
   pull_request:
     branches: [main]
+    paths:
+      - 'plugin/**'
+      - 'tests/**'
+      - 'requirements*.txt'
+      - 'pyproject.toml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -23,30 +28,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Detect Python changes
-        id: changes
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            python:
-              - 'plugin/**'
-              - 'tests/**'
-              - 'requirements*.txt'
-              - 'pyproject.toml'
-
       - name: Set up Python
-        if: steps.changes.outputs.python == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.14'
           cache: 'pip'
 
       - name: Install dependencies
-        if: steps.changes.outputs.python == 'true'
         run: |
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
       - name: Run tests
-        if: steps.changes.outputs.python == 'true'
         run: pytest
