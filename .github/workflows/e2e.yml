@@ -308,7 +308,7 @@ jobs:
             --network-id "$NETWORK_ID" \
             --environment prestable \
             --postgresql-version 16 \
-            --resource-preset b1.medium \
+            --resource-preset c3-c2-m4 \
             --disk-type network-hdd \
             --disk-size 10 \
             --host "zone-id=$ZONE,subnet-id=$SUBNET_ID" \
@@ -962,10 +962,10 @@ jobs:
             --folder-id "$FOLDER_ID" \
             --network-id "$NETWORK_ID" \
             --environment prestable \
-            --version 3.6 \
+            --version 4.0 \
             --zone-ids "$ZONE" \
             --subnet-ids "$SUBNET_ID" \
-            --resource-preset s2.micro \
+            --resource-preset b3-c1-m4 \
             --disk-type network-hdd \
             --disk-size 10 \
             --brokers-count 1 \
