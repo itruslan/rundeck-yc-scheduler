@@ -96,10 +96,22 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('examples/configuration/terraform-rundeck-yc-scheduler/providers.tf') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
       - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Terraform apply
+        env:
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
         run: |
+          mkdir -p ~/.terraform.d/plugin-cache
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
@@ -278,10 +290,22 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('examples/configuration/terraform-rundeck-yc-scheduler/providers.tf') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
       - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Terraform apply
+        env:
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
         run: |
+          mkdir -p ~/.terraform.d/plugin-cache
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
@@ -485,10 +509,22 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('examples/configuration/terraform-rundeck-yc-scheduler/providers.tf') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
       - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Terraform apply
+        env:
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
         run: |
+          mkdir -p ~/.terraform.d/plugin-cache
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
@@ -684,10 +720,22 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('examples/configuration/terraform-rundeck-yc-scheduler/providers.tf') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
       - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Terraform apply
+        env:
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
         run: |
+          mkdir -p ~/.terraform.d/plugin-cache
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
@@ -934,10 +982,22 @@ jobs:
             | jq -r '.token')
           echo "RUNDECK_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
+      - name: Cache Terraform providers
+        uses: actions/cache@v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ runner.os }}-${{ hashFiles('examples/configuration/terraform-rundeck-yc-scheduler/providers.tf') }}
+          restore-keys: terraform-providers-${{ runner.os }}-
+
       - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
 
       - name: Terraform apply
+        env:
+          TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
         run: |
+          mkdir -p ~/.terraform.d/plugin-cache
           cd examples/configuration/terraform-rundeck-yc-scheduler
           terraform init -input=false
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
