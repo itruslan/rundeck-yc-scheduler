@@ -72,7 +72,7 @@ See [Docker deployment guide](examples/deployment/docker/) or [Ansible role](exa
 ## Ideas & future work
 
 - **OIDC authentication example** — add a ready-to-use configuration example for SSO via Keycloak, Authentik, or Okta
-- **More resource types** — application-load-balancer, managed-valkey, managed-mysql, managed-opensearch, managed-mongodb, ydb, managed-clickhouse (see table above)
+- **More resource types** — see planned entries in the table above
 - **Dry-run mode** — log what would be stopped/started without actually calling the API, useful for auditing schedules
 - **Configurable operation timeout** — expose `operation_timeout` as a Rundeck job option so users can tune wait time per job without rebuilding the image
 - **Kubernetes deployment example** — add `examples/deployment/kubernetes/` with Deployment, Service, ConfigMap, Secret, and PVC manifests alongside the existing Docker and Ansible examples
