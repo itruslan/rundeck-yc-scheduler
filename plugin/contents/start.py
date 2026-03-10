@@ -30,6 +30,8 @@ from yandex.cloud.loadbalancer.v1 import (
     network_load_balancer_service_pb2,
     network_load_balancer_service_pb2_grpc,
 )
+from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_service_pb2
+from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yc_common import (
     COMPUTE_RUNNING,
@@ -38,6 +40,9 @@ from yc_common import (
     K8S_RUNNING,
     K8S_STOPPED,
     K8S_STOPPING,
+    KAFKA_RUNNING,
+    KAFKA_STOPPED,
+    KAFKA_STOPPING,
     NLB_ACTIVE,
     NLB_STOPPED,
     NLB_STOPPING,
@@ -124,6 +129,31 @@ def start_k8s_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
     print(f"Cluster {cluster_id} started.")
 
 
+def start_kafka_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+    svc = sdk.client(kafka_cluster_service_pb2_grpc.ClusterServiceStub)
+
+    try:
+        cluster = svc.Get(kafka_cluster_service_pb2.GetClusterRequest(cluster_id=cluster_id))
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            print(f"Cluster {cluster_id} not found, skipping.")
+            return
+        raise
+    status = cluster.status
+
+    if status == KAFKA_RUNNING:
+        print(f"Cluster {cluster_id} is already running.")
+        return
+    if status not in (KAFKA_STOPPED, KAFKA_STOPPING):
+        print(f"Cluster {cluster_id} is in status {status}, skipping.")
+        return
+
+    print(f"Starting managed-kafka cluster {cluster_id}...")
+    op = svc.Start(kafka_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
+    wait_for_operation(sdk, op.id)
+    print(f"Cluster {cluster_id} started.")
+
+
 def start_nlb(sdk: yandexcloud.SDK, nlb_id: str) -> None:
     svc = sdk.client(network_load_balancer_service_pb2_grpc.NetworkLoadBalancerServiceStub)
 
@@ -173,6 +203,8 @@ def main() -> None:
                 start_pg_cluster(sdk, args.id)
             case "managed-kubernetes":
                 start_k8s_cluster(sdk, args.id)
+            case "managed-kafka":
+                start_kafka_cluster(sdk, args.id)
             case "network-load-balancer":
                 start_nlb(sdk, args.id)
             case _:
