@@ -101,7 +101,7 @@ jobs:
       - name: Terraform apply
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
-          terraform init -input=false
+          for i in 1 2 3; do terraform init -input=false && break || { echo "terraform init attempt $i failed, retrying..."; sleep 10; }; done
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_rundeck_url="$RUNDECK_URL"
           export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
@@ -283,7 +283,7 @@ jobs:
       - name: Terraform apply
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
-          terraform init -input=false
+          for i in 1 2 3; do terraform init -input=false && break || { echo "terraform init attempt $i failed, retrying..."; sleep 10; }; done
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_rundeck_url="$RUNDECK_URL"
           export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
@@ -490,7 +490,7 @@ jobs:
       - name: Terraform apply
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
-          terraform init -input=false
+          for i in 1 2 3; do terraform init -input=false && break || { echo "terraform init attempt $i failed, retrying..."; sleep 10; }; done
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_rundeck_url="$RUNDECK_URL"
           export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
@@ -689,7 +689,7 @@ jobs:
       - name: Terraform apply
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
-          terraform init -input=false
+          for i in 1 2 3; do terraform init -input=false && break || { echo "terraform init attempt $i failed, retrying..."; sleep 10; }; done
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_rundeck_url="$RUNDECK_URL"
           export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
@@ -939,7 +939,7 @@ jobs:
       - name: Terraform apply
         run: |
           cd examples/configuration/terraform-rundeck-yc-scheduler
-          terraform init -input=false
+          for i in 1 2 3; do terraform init -input=false && break || { echo "terraform init attempt $i failed, retrying..."; sleep 10; }; done
           SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
           export TF_VAR_rundeck_url="$RUNDECK_URL"
           export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
