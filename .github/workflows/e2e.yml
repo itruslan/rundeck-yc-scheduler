@@ -1531,7 +1531,7 @@ jobs:
             --network-id "$NETWORK_ID" \
             --environment prestable \
             --clickhouse-resource-preset b3-c1-m4 \
-            --clickhouse-disk-type-id network-ssd \
+            --clickhouse-disk-type network-ssd \
             --clickhouse-disk-size 10 \
             --host zone-id="$ZONE",subnet-id="$SUBNET_ID",type=clickhouse \
             --admin-password "E2eTestPass1!" \
