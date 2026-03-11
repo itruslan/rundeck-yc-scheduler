@@ -36,6 +36,8 @@ from yandex.cloud.loadbalancer.v1 import (
     network_load_balancer_service_pb2,
     network_load_balancer_service_pb2_grpc,
 )
+from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2 as ch_cluster_service_pb2
+from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2_grpc as ch_cluster_service_pb2_grpc
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_service_pb2
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
@@ -45,6 +47,9 @@ from yc_common import (
     ALB_ACTIVE,
     ALB_STARTING,
     ALB_STOPPED,
+    CLICKHOUSE_RUNNING,
+    CLICKHOUSE_STARTING,
+    CLICKHOUSE_STOPPED,
     COMPUTE_RUNNING,
     COMPUTE_STARTING,
     COMPUTE_STOPPED,
@@ -91,6 +96,31 @@ def stop_compute_instance(sdk: yandexcloud.SDK, instance_id: str) -> None:
     op = svc.Stop(instance_service_pb2.StopInstanceRequest(instance_id=instance_id))
     wait_for_operation(sdk, op.id)
     print(f"Instance {instance_id} stopped.")
+
+
+def stop_clickhouse_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+    svc = sdk.client(ch_cluster_service_pb2_grpc.ClusterServiceStub)
+
+    try:
+        cluster = svc.Get(ch_cluster_service_pb2.GetClusterRequest(cluster_id=cluster_id))
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            print(f"Cluster {cluster_id} not found, skipping.")
+            return
+        raise
+    status = cluster.status
+
+    if status == CLICKHOUSE_STOPPED:
+        print(f"Cluster {cluster_id} is already stopped.")
+        return
+    if status not in (CLICKHOUSE_RUNNING, CLICKHOUSE_STARTING):
+        print(f"Cluster {cluster_id} is in status {status}, skipping.")
+        return
+
+    print(f"Stopping managed-clickhouse cluster {cluster_id}...")
+    op = svc.Stop(ch_cluster_service_pb2.StopClusterRequest(cluster_id=cluster_id))
+    wait_for_operation(sdk, op.id)
+    print(f"Cluster {cluster_id} stopped.")
 
 
 def stop_pg_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
@@ -269,6 +299,8 @@ def main() -> None:
                 stop_k8s_cluster(sdk, args.id)
             case "managed-kafka":
                 stop_kafka_cluster(sdk, args.id)
+            case "managed-clickhouse":
+                stop_clickhouse_cluster(sdk, args.id)
             case "managed-redis":
                 stop_redis_cluster(sdk, args.id)
             case "network-load-balancer":

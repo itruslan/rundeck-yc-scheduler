@@ -10,6 +10,9 @@ from yc_common import (
     ALB_ACTIVE,
     ALB_STARTING,
     ALB_STOPPED,
+    CLICKHOUSE_RUNNING,
+    CLICKHOUSE_STARTING,
+    CLICKHOUSE_STOPPED,
     COMPUTE_RUNNING,
     COMPUTE_STARTING,
     COMPUTE_STOPPED,
@@ -317,6 +320,57 @@ class TestStopAlb:
         stop.stop_alb(mock_sdk, "alb-id")
 
         svc.Stop.assert_not_called()
+
+
+class TestStopClickhouseCluster:
+    def test_already_stopped_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=CLICKHOUSE_STOPPED)
+        mock_sdk.client.return_value = svc
+
+        stop.stop_clickhouse_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_not_called()
+
+    def test_stops_running_cluster(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=CLICKHOUSE_RUNNING)
+        svc.Stop.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("stop.wait_for_operation")
+
+        stop.stop_clickhouse_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_called_once()
+        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+
+    def test_stops_starting_cluster(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=CLICKHOUSE_STARTING)
+        svc.Stop.return_value = MagicMock(id="op-2")
+        mock_sdk.client.return_value = svc
+        mocker.patch("stop.wait_for_operation")
+
+        stop.stop_clickhouse_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_called_once()
+
+    def test_not_found_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.NOT_FOUND)
+        mock_sdk.client.return_value = svc
+
+        stop.stop_clickhouse_cluster(mock_sdk, "cluster-id")
+
+        svc.Stop.assert_not_called()
+
+    def test_other_rpc_error_raises(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.UNAVAILABLE)
+        mock_sdk.client.return_value = svc
+
+        with pytest.raises(grpc.RpcError):
+            stop.stop_clickhouse_cluster(mock_sdk, "cluster-id")
 
 
 class TestStopRedisCluster:
