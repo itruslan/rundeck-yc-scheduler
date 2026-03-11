@@ -23,6 +23,12 @@ os.environ.setdefault("GRPC_VERBOSITY", "NONE")
 
 import grpc
 import yandexcloud
+from yandex.cloud.apploadbalancer.v1 import (
+    load_balancer_service_pb2 as alb_service_pb2,
+)
+from yandex.cloud.apploadbalancer.v1 import (
+    load_balancer_service_pb2_grpc as alb_service_pb2_grpc,
+)
 from yandex.cloud.compute.v1 import instance_service_pb2, instance_service_pb2_grpc
 from yandex.cloud.k8s.v1 import cluster_service_pb2 as k8s_cluster_service_pb2
 from yandex.cloud.k8s.v1 import cluster_service_pb2_grpc as k8s_cluster_service_pb2_grpc
@@ -34,6 +40,9 @@ from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_servi
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yc_common import (
+    ALB_ACTIVE,
+    ALB_STOPPED,
+    ALB_STOPPING,
     COMPUTE_RUNNING,
     COMPUTE_STOPPED,
     COMPUTE_STOPPING,
@@ -187,6 +196,31 @@ def start_nlb(sdk: yandexcloud.SDK, nlb_id: str) -> None:
     print(f"Network load balancer {nlb_id} started.")
 
 
+def start_alb(sdk: yandexcloud.SDK, alb_id: str) -> None:
+    svc = sdk.client(alb_service_pb2_grpc.LoadBalancerServiceStub)
+
+    try:
+        balancer = svc.Get(alb_service_pb2.GetLoadBalancerRequest(load_balancer_id=alb_id))
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            print(f"Application load balancer {alb_id} not found, skipping.")
+            return
+        raise
+    status = balancer.status
+
+    if status == ALB_ACTIVE:
+        print(f"Application load balancer {alb_id} is already active.")
+        return
+    if status not in (ALB_STOPPED, ALB_STOPPING):
+        print(f"Application load balancer {alb_id} is in status {status}, skipping.")
+        return
+
+    print(f"Starting application load balancer {alb_id}...")
+    op = svc.Start(alb_service_pb2.StartLoadBalancerRequest(load_balancer_id=alb_id))
+    wait_for_operation(sdk, op.id)
+    print(f"Application load balancer {alb_id} started.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--type", required=True, help="Resource type (e.g. compute-instance)")
@@ -207,6 +241,8 @@ def main() -> None:
                 start_kafka_cluster(sdk, args.id)
             case "network-load-balancer":
                 start_nlb(sdk, args.id)
+            case "application-load-balancer":
+                start_alb(sdk, args.id)
             case _:
                 print(f"ERROR: unsupported resource type: {args.type}", file=sys.stderr)
                 sys.exit(1)

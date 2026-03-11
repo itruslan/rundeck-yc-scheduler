@@ -55,6 +55,12 @@ KAFKA_STOPPING = 5
 KAFKA_STOPPED = 6
 KAFKA_STARTING = 7
 
+# Application Load Balancer (LoadBalancer.Status)
+ALB_ACTIVE = 3
+ALB_STOPPING = 4
+ALB_STOPPED = 5
+ALB_STARTING = 2
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.
