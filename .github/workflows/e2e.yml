@@ -1145,13 +1145,16 @@ jobs:
       - name: Create Application Load Balancer
         id: resource
         run: |
-          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
-            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
-          echo "Using network: $NETWORK_ID"
+          SUBNET=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0]')
+          SUBNET_ID=$(echo "$SUBNET" | jq -r '.id')
+          NETWORK_ID=$(echo "$SUBNET" | jq -r '.network_id')
+          echo "Using network: $NETWORK_ID, subnet: $SUBNET_ID"
           yc alb load-balancer create \
             --name "$ALB_NAME" \
             --folder-id "$FOLDER_ID" \
             --network-id "$NETWORK_ID" \
+            --location "zone=$ZONE,subnet-id=$SUBNET_ID" \
             --labels "for-test=true" \
             --async
           ALB_ID=$(yc alb load-balancer get --name "$ALB_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
