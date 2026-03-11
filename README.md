@@ -43,7 +43,7 @@ All operations are idempotent — resources already in the target state are skip
 | `network-load-balancer` | ✅ done | 0.1.0 |
 | `managed-kafka` | ✅ done | 0.2.0 |
 | `application-load-balancer` | ✅ done | 0.3.0 |
-| `managed-valkey` | 🔜 planned | — |
+| `managed-redis` | ✅ done | 0.4.0 |
 | `managed-mysql` | 🔜 planned | — |
 | `managed-opensearch` | 🔜 planned | — |
 | `managed-mongodb` | 🔜 planned | — |

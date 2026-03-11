@@ -39,6 +39,8 @@ from yandex.cloud.loadbalancer.v1 import (
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_service_pb2
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
+from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
+from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
 from yc_common import (
     ALB_ACTIVE,
     ALB_STOPPED,
@@ -58,6 +60,9 @@ from yc_common import (
     PG_RUNNING,
     PG_STOPPED,
     PG_STOPPING,
+    REDIS_RUNNING,
+    REDIS_STOPPED,
+    REDIS_STOPPING,
     load_sdk_from_storage,
     wait_for_operation,
 )
@@ -163,6 +168,31 @@ def start_kafka_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
     print(f"Cluster {cluster_id} started.")
 
 
+def start_redis_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+    svc = sdk.client(redis_cluster_service_pb2_grpc.ClusterServiceStub)
+
+    try:
+        cluster = svc.Get(redis_cluster_service_pb2.GetClusterRequest(cluster_id=cluster_id))
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            print(f"Cluster {cluster_id} not found, skipping.")
+            return
+        raise
+    status = cluster.status
+
+    if status == REDIS_RUNNING:
+        print(f"Cluster {cluster_id} is already running.")
+        return
+    if status not in (REDIS_STOPPED, REDIS_STOPPING):
+        print(f"Cluster {cluster_id} is in status {status}, skipping.")
+        return
+
+    print(f"Starting managed-redis cluster {cluster_id}...")
+    op = svc.Start(redis_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
+    wait_for_operation(sdk, op.id)
+    print(f"Cluster {cluster_id} started.")
+
+
 def start_nlb(sdk: yandexcloud.SDK, nlb_id: str) -> None:
     svc = sdk.client(network_load_balancer_service_pb2_grpc.NetworkLoadBalancerServiceStub)
 
@@ -239,6 +269,8 @@ def main() -> None:
                 start_k8s_cluster(sdk, args.id)
             case "managed-kafka":
                 start_kafka_cluster(sdk, args.id)
+            case "managed-redis":
+                start_redis_cluster(sdk, args.id)
             case "network-load-balancer":
                 start_nlb(sdk, args.id)
             case "application-load-balancer":
