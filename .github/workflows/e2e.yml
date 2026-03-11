@@ -1722,7 +1722,7 @@ jobs:
             --network-id "$NETWORK_ID" \
             --environment prestable \
             --mysql-version 8.0 \
-            --resource-preset b1.nano \
+            --resource-preset b1.medium \
             --disk-type network-ssd \
             --disk-size 10 \
             --host zone-id="$ZONE",subnet-id="$SUBNET_ID" \
