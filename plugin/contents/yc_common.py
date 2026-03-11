@@ -73,6 +73,12 @@ CLICKHOUSE_STOPPING = 5
 CLICKHOUSE_STOPPED = 6
 CLICKHOUSE_STARTING = 7
 
+# Managed MySQL cluster (Cluster.Status)
+MYSQL_RUNNING = 2
+MYSQL_STOPPING = 5
+MYSQL_STOPPED = 6
+MYSQL_STARTING = 7
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.

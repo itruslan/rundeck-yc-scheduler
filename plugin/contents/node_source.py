@@ -37,6 +37,8 @@ from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2 as ch_cluster_ser
 from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2_grpc as ch_cluster_service_pb2_grpc
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_service_pb2
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
+from yandex.cloud.mdb.mysql.v1 import cluster_service_pb2 as mysql_cluster_service_pb2
+from yandex.cloud.mdb.mysql.v1 import cluster_service_pb2_grpc as mysql_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
@@ -130,6 +132,17 @@ _REDIS_STATUSES = {
 }
 
 _CLICKHOUSE_STATUSES = {
+    0: "STATUS_UNKNOWN",
+    1: "CREATING",
+    2: "RUNNING",
+    3: "ERROR",
+    4: "UPDATING",
+    5: "STOPPING",
+    6: "STOPPED",
+    7: "STARTING",
+}
+
+_MYSQL_STATUSES = {
     0: "STATUS_UNKNOWN",
     1: "CREATING",
     2: "RUNNING",
@@ -294,6 +307,16 @@ def clickhouse_cluster_to_node(cluster: Any, folder_id: str) -> dict:
     return _to_node(cluster, "managed-clickhouse", cluster.status, _CLICKHOUSE_STATUSES, folder_id)
 
 
+def list_mysql_clusters(sdk: yandexcloud.SDK, folder_id: str) -> list:
+    svc = sdk.client(mysql_cluster_service_pb2_grpc.ClusterServiceStub)
+    return _paginate(svc.List, mysql_cluster_service_pb2.ListClustersRequest, "clusters", folder_id)
+
+
+def mysql_cluster_to_node(cluster: Any, folder_id: str) -> dict:
+    """Convert a YC managed-mysql cluster to Rundeck node format."""
+    return _to_node(cluster, "managed-mysql", cluster.status, _MYSQL_STATUSES, folder_id)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -363,6 +386,12 @@ def main() -> None:
             nodes[cluster.name] = clickhouse_cluster_to_node(cluster, folder_id)
     except Exception as e:
         print(f"WARNING: failed to list managed-clickhouse clusters: {e}", file=sys.stderr)
+
+    try:
+        for cluster in list_mysql_clusters(sdk, folder_id):
+            nodes[cluster.name] = mysql_cluster_to_node(cluster, folder_id)
+    except Exception as e:
+        print(f"WARNING: failed to list managed-mysql clusters: {e}", file=sys.stderr)
 
     print(json.dumps(nodes, indent=2, ensure_ascii=False))
 
