@@ -1,3 +1,18 @@
+# Local development helpers for rundeck-yc-scheduler.
+#
+# Prerequisites:
+#   docker      — to build and run the Rundeck container
+#   terraform   — to configure Rundeck projects and jobs (>= 1.0)
+#   uv          — Python package manager, used to run tests (pip install uv)
+#   jq          — JSON processor used in shell scripts
+#   curl        — HTTP client used to obtain the Rundeck API token
+#   yc          — Yandex Cloud CLI, needed only for manual resource management
+#
+# Quick start:
+#   cp .env.example .env   # fill in FOLDER_ID and YC_SA_KEY_FILE
+#   make up                # build image → start Rundeck → terraform apply
+#   make test              # run unit tests (no YC account needed)
+
 -include .env
 export
 
@@ -84,7 +99,7 @@ _run:
 
 _wait-rundeck:
 	@echo "Waiting for Rundeck to start..."
-	@for i in $$(seq 1 36); do \
+	@for i in $$(seq 1 60); do \
 		STATUS=$$(curl -s -o /dev/null -w "%{http_code}" --max-redirs 0 \
 			-X POST -c $(COOKIE_FILE) \
 			-H "Content-Type: application/x-www-form-urlencoded" \
@@ -92,7 +107,7 @@ _wait-rundeck:
 			$(RUNDECK_URL)/j_security_check 2>/dev/null || echo 000); \
 		[ "$$STATUS" = "302" ] && echo "Rundeck is ready" && \
 			$(MAKE) --no-print-directory _get-token && exit 0; \
-		echo "  [$$i/36] status $$STATUS, retrying..."; \
+		echo "  [$$i/60] status $$STATUS, retrying..."; \
 		sleep 5; \
 	done; \
 	echo "ERROR: Rundeck did not start within 3 minutes"; \
