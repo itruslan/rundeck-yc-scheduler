@@ -1343,6 +1343,7 @@ jobs:
             --disk-type-id network-ssd \
             --disk-size 16 \
             --host zone-id="$ZONE",subnet-id="$SUBNET_ID" \
+            --password "E2eTestPass1!" \
             --labels "for-test=true" \
             --async
           CLUSTER_ID=$(yc managed-redis cluster get --name "$CLUSTER_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
