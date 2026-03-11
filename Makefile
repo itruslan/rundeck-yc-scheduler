@@ -22,8 +22,12 @@ TF_DIR       := examples/configuration/terraform-rundeck-yc-scheduler
 TOKEN_FILE   := /tmp/rundeck-yc-token
 COOKIE_FILE  := /tmp/rundeck-yc-cookie.txt
 
-.PHONY: build up down restart logs token tf test e2e \
+.PHONY: build up down restart logs token tf test e2e help \
         _check-env _wait-rundeck _get-token
+
+## Show this help
+help:
+	@awk '/^## /{desc=substr($$0,4); next} /^[a-zA-Z][a-zA-Z0-9_-]*:/{print sprintf("  %-12s %s", substr($$1,1,length($$1)-1), desc); desc=""} /^[^#]/{desc=""}' $(MAKEFILE_LIST)
 
 # ---------------------------------------------------------------------------
 # Main targets
@@ -74,10 +78,7 @@ tf: _check-env _get-token
 test:
 	uv run pytest
 
-## Run e2e helper against local Rundeck — pass ARGS="<subcommand> ..."
-## Examples:
-##   make e2e ARGS="wait-node --project dev --resource-id <id>"
-##   make e2e ARGS="run-job --project dev --group e2e/compute-instance --name Stop --resource-id <id>"
+## Run e2e helper: make e2e ARGS="wait-node --project dev --resource-id <id>"
 e2e: _get-token
 	RUNDECK_URL=$(RUNDECK_URL) \
 	RUNDECK_TOKEN=$$(cat $(TOKEN_FILE)) \
