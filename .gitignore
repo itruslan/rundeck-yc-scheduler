@@ -13,6 +13,7 @@ uv.lock
 *.tfstate
 *.tfstate.backup
 *.tfvars
+.terraform.lock.hcl
 
 # Terragrunt
 .terragrunt-cache/
