@@ -13,6 +13,7 @@ uv.lock
 *.tfstate
 *.tfstate.backup
 *.tfvars
+.terraform.lock.hcl
 
 # Terragrunt
 .terragrunt-cache/
@@ -24,3 +25,6 @@ uv.lock
 .vscode/
 .DS_Store
 *.log
+
+# Local development
+.env
