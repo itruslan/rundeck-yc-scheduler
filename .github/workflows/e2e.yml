@@ -1338,7 +1338,7 @@ jobs:
             --folder-id "$FOLDER_ID" \
             --network-id "$NETWORK_ID" \
             --environment prestable \
-            --redis-version 9 \
+            --redis-version 8.0-valkey \
             --resource-preset b3-c1-m4 \
             --disk-type-id network-ssd \
             --disk-size 16 \
