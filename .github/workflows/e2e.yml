@@ -1338,11 +1338,10 @@ jobs:
             --folder-id "$FOLDER_ID" \
             --network-id "$NETWORK_ID" \
             --environment prestable \
-            --redis-version 7.2 \
+            --redis-version 9 \
             --resource-preset b3-c1-m4 \
-            --disk-type network-ssd \
+            --disk-type-id network-ssd \
             --disk-size 16 \
-            --password "" \
             --host zone-id="$ZONE",subnet-id="$SUBNET_ID" \
             --labels "for-test=true" \
             --async
