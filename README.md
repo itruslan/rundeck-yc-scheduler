@@ -48,7 +48,7 @@ All operations are idempotent — resources already in the target state are skip
 | `managed-opensearch` | 🔜 planned | — |
 | `managed-mongodb` | 🔜 planned | — |
 | `ydb` | 🔜 planned | — |
-| `managed-clickhouse` | 🔜 planned | — |
+| `managed-clickhouse` | ✅ done | 0.5.0 |
 
 ## Quick start
 

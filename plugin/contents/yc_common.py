@@ -67,6 +67,12 @@ REDIS_STOPPING = 5
 REDIS_STOPPED = 6
 REDIS_STARTING = 7
 
+# Managed ClickHouse cluster (Cluster.Status)
+CLICKHOUSE_RUNNING = 2
+CLICKHOUSE_STOPPING = 5
+CLICKHOUSE_STOPPED = 6
+CLICKHOUSE_STARTING = 7
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.

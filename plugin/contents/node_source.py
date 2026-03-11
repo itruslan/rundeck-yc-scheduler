@@ -33,6 +33,8 @@ from yandex.cloud.loadbalancer.v1 import (
     network_load_balancer_service_pb2,
     network_load_balancer_service_pb2_grpc,
 )
+from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2 as ch_cluster_service_pb2
+from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2_grpc as ch_cluster_service_pb2_grpc
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_service_pb2
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
@@ -117,6 +119,17 @@ _ALB_STATUSES = {
 }
 
 _REDIS_STATUSES = {
+    0: "STATUS_UNKNOWN",
+    1: "CREATING",
+    2: "RUNNING",
+    3: "ERROR",
+    4: "UPDATING",
+    5: "STOPPING",
+    6: "STOPPED",
+    7: "STARTING",
+}
+
+_CLICKHOUSE_STATUSES = {
     0: "STATUS_UNKNOWN",
     1: "CREATING",
     2: "RUNNING",
@@ -271,6 +284,16 @@ def redis_cluster_to_node(cluster: Any, folder_id: str) -> dict:
     return _to_node(cluster, "managed-redis", cluster.status, _REDIS_STATUSES, folder_id)
 
 
+def list_clickhouse_clusters(sdk: yandexcloud.SDK, folder_id: str) -> list:
+    svc = sdk.client(ch_cluster_service_pb2_grpc.ClusterServiceStub)
+    return _paginate(svc.List, ch_cluster_service_pb2.ListClustersRequest, "clusters", folder_id)
+
+
+def clickhouse_cluster_to_node(cluster: Any, folder_id: str) -> dict:
+    """Convert a YC managed-clickhouse cluster to Rundeck node format."""
+    return _to_node(cluster, "managed-clickhouse", cluster.status, _CLICKHOUSE_STATUSES, folder_id)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -334,6 +357,12 @@ def main() -> None:
             nodes[cluster.name] = redis_cluster_to_node(cluster, folder_id)
     except Exception as e:
         print(f"WARNING: failed to list managed-redis clusters: {e}", file=sys.stderr)
+
+    try:
+        for cluster in list_clickhouse_clusters(sdk, folder_id):
+            nodes[cluster.name] = clickhouse_cluster_to_node(cluster, folder_id)
+    except Exception as e:
+        print(f"WARNING: failed to list managed-clickhouse clusters: {e}", file=sys.stderr)
 
     print(json.dumps(nodes, indent=2, ensure_ascii=False))
 
