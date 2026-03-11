@@ -36,6 +36,8 @@ from yandex.cloud.loadbalancer.v1 import (
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_service_pb2
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
+from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
+from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
 from yc_common import load_sdk_from_storage
 
 # YC automatically names Kubernetes worker nodes as: 20 chars + dash + 4 chars.
@@ -112,6 +114,17 @@ _ALB_STATUSES = {
     4: "STOPPING",
     5: "STOPPED",
     6: "DELETING",
+}
+
+_REDIS_STATUSES = {
+    0: "STATUS_UNKNOWN",
+    1: "CREATING",
+    2: "RUNNING",
+    3: "ERROR",
+    4: "UPDATING",
+    5: "STOPPING",
+    6: "STOPPED",
+    7: "STARTING",
 }
 
 
@@ -248,6 +261,16 @@ def alb_to_node(balancer: Any, folder_id: str) -> dict:
     )
 
 
+def list_redis_clusters(sdk: yandexcloud.SDK, folder_id: str) -> list:
+    svc = sdk.client(redis_cluster_service_pb2_grpc.ClusterServiceStub)
+    return _paginate(svc.List, redis_cluster_service_pb2.ListClustersRequest, "clusters", folder_id)
+
+
+def redis_cluster_to_node(cluster: Any, folder_id: str) -> dict:
+    """Convert a YC managed-redis cluster to Rundeck node format."""
+    return _to_node(cluster, "managed-redis", cluster.status, _REDIS_STATUSES, folder_id)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -305,6 +328,12 @@ def main() -> None:
             nodes[balancer.name] = alb_to_node(balancer, folder_id)
     except Exception as e:
         print(f"WARNING: failed to list application load balancers: {e}", file=sys.stderr)
+
+    try:
+        for cluster in list_redis_clusters(sdk, folder_id):
+            nodes[cluster.name] = redis_cluster_to_node(cluster, folder_id)
+    except Exception as e:
+        print(f"WARNING: failed to list managed-redis clusters: {e}", file=sys.stderr)
 
     print(json.dumps(nodes, indent=2, ensure_ascii=False))
 

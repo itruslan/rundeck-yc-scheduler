@@ -61,6 +61,12 @@ ALB_STOPPING = 4
 ALB_STOPPED = 5
 ALB_STARTING = 2
 
+# Managed Redis cluster (Cluster.Status)
+REDIS_RUNNING = 2
+REDIS_STOPPING = 5
+REDIS_STOPPED = 6
+REDIS_STARTING = 7
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.
