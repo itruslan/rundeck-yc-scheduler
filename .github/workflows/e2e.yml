@@ -1163,9 +1163,9 @@ jobs:
 
       - name: Wait for ALB ACTIVE
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             STATUS=$(yc alb load-balancer get --id "${{ steps.resource.outputs.alb_id }}" --format json | jq -r '.status')
-            echo "[$i/30] status: $STATUS"
+            echo "[$i/60] status: $STATUS"
             if [ "$STATUS" = "ACTIVE" ]; then exit 0; fi
             sleep 10
           done
