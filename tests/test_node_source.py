@@ -116,6 +116,15 @@ class TestNlbToNode:
         assert node["resource_type"] == "network-load-balancer"
 
 
+class TestAlbToNode:
+    def test_output(self):
+        balancer = _make_resource(name="alb-prod", id="alb-1", status=3)
+        node = node_source.alb_to_node(balancer, "folder-1")
+
+        assert node["resource_type"] == "application-load-balancer"
+        assert node["status"] == "ACTIVE"
+
+
 class TestK8sNodeFilter:
     """K8S worker nodes (auto-named) must be excluded from the node list."""
 
@@ -139,6 +148,8 @@ class TestK8sNodeFilter:
         mocker.patch("node_source.list_pg_clusters", return_value=[])
         mocker.patch("node_source.list_k8s_clusters", return_value=[])
         mocker.patch("node_source.list_nlb", return_value=[])
+        mocker.patch("node_source.list_kafka_clusters", return_value=[])
+        mocker.patch("node_source.list_alb", return_value=[])
 
         node_source.main()
 

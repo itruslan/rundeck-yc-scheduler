@@ -34,6 +34,10 @@ module "rundeck_projects" {
           enabled    = true
           stop_order = 1 # Stop databases first
         }
+        "application-load-balancer" = {
+          enabled    = true
+          stop_order = 3 # Stop ALBs after VMs
+        }
       }
     },
     {

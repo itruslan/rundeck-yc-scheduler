@@ -20,6 +20,12 @@ import sys
 from typing import Any, Callable
 
 import yandexcloud
+from yandex.cloud.apploadbalancer.v1 import (
+    load_balancer_service_pb2 as alb_service_pb2,
+)
+from yandex.cloud.apploadbalancer.v1 import (
+    load_balancer_service_pb2_grpc as alb_service_pb2_grpc,
+)
 from yandex.cloud.compute.v1 import instance_service_pb2, instance_service_pb2_grpc
 from yandex.cloud.k8s.v1 import cluster_service_pb2 as k8s_cluster_service_pb2
 from yandex.cloud.k8s.v1 import cluster_service_pb2_grpc as k8s_cluster_service_pb2_grpc
@@ -96,6 +102,16 @@ _KAFKA_STATUSES = {
     5: "STOPPING",
     6: "STOPPED",
     7: "STARTING",
+}
+
+_ALB_STATUSES = {
+    0: "STATUS_UNSPECIFIED",
+    1: "CREATING",
+    2: "STARTING",
+    3: "ACTIVE",
+    4: "STOPPING",
+    5: "STOPPED",
+    6: "DELETING",
 }
 
 
@@ -218,6 +234,20 @@ def kafka_cluster_to_node(cluster: Any, folder_id: str) -> dict:
     return _to_node(cluster, "managed-kafka", cluster.status, _KAFKA_STATUSES, folder_id)
 
 
+def list_alb(sdk: yandexcloud.SDK, folder_id: str) -> list:
+    svc = sdk.client(alb_service_pb2_grpc.LoadBalancerServiceStub)
+    return _paginate(
+        svc.List, alb_service_pb2.ListLoadBalancersRequest, "load_balancers", folder_id
+    )
+
+
+def alb_to_node(balancer: Any, folder_id: str) -> dict:
+    """Convert a YC application load balancer to Rundeck node format."""
+    return _to_node(
+        balancer, "application-load-balancer", balancer.status, _ALB_STATUSES, folder_id
+    )
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -269,6 +299,12 @@ def main() -> None:
             nodes[cluster.name] = kafka_cluster_to_node(cluster, folder_id)
     except Exception as e:
         print(f"WARNING: failed to list managed-kafka clusters: {e}", file=sys.stderr)
+
+    try:
+        for balancer in list_alb(sdk, folder_id):
+            nodes[balancer.name] = alb_to_node(balancer, folder_id)
+    except Exception as e:
+        print(f"WARNING: failed to list application load balancers: {e}", file=sys.stderr)
 
     print(json.dumps(nodes, indent=2, ensure_ascii=False))
 

@@ -7,6 +7,9 @@ import pytest
 import start
 from conftest import rpc_error
 from yc_common import (
+    ALB_ACTIVE,
+    ALB_STOPPED,
+    ALB_STOPPING,
     COMPUTE_RUNNING,
     COMPUTE_STOPPED,
     COMPUTE_STOPPING,
@@ -251,3 +254,63 @@ class TestStartNlb:
 
         with pytest.raises(grpc.RpcError):
             start.start_nlb(mock_sdk, "nlb-id")
+
+
+class TestStartAlb:
+    def test_already_active_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=ALB_ACTIVE)
+        mock_sdk.client.return_value = svc
+
+        start.start_alb(mock_sdk, "alb-id")
+
+        svc.Start.assert_not_called()
+
+    def test_starts_stopped_alb(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=ALB_STOPPED)
+        svc.Start.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("start.wait_for_operation")
+
+        start.start_alb(mock_sdk, "alb-id")
+
+        svc.Start.assert_called_once()
+        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+
+    def test_starts_stopping_alb(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=ALB_STOPPING)
+        svc.Start.return_value = MagicMock(id="op-2")
+        mock_sdk.client.return_value = svc
+        mocker.patch("start.wait_for_operation")
+
+        start.start_alb(mock_sdk, "alb-id")
+
+        svc.Start.assert_called_once()
+
+    def test_not_found_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.NOT_FOUND)
+        mock_sdk.client.return_value = svc
+
+        start.start_alb(mock_sdk, "alb-id")
+
+        svc.Start.assert_not_called()
+
+    def test_other_rpc_error_raises(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.UNAVAILABLE)
+        mock_sdk.client.return_value = svc
+
+        with pytest.raises(grpc.RpcError):
+            start.start_alb(mock_sdk, "alb-id")
+
+    def test_unknown_status_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=99)
+        mock_sdk.client.return_value = svc
+
+        start.start_alb(mock_sdk, "alb-id")
+
+        svc.Start.assert_not_called()
