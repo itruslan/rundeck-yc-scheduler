@@ -24,6 +24,3 @@ uv.lock
 .vscode/
 .DS_Store
 *.log
-
-# Local development
-.env
