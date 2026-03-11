@@ -1218,15 +1218,15 @@ jobs:
       - name: Cleanup - verify ALB deleted
         if: always()
         run: |
-          for i in $(seq 1 18); do
+          for i in $(seq 1 60); do
             if ! yc alb load-balancer get --id "${{ steps.resource.outputs.alb_id }}" --format json > /dev/null 2>&1; then
               echo "ALB deleted"
               exit 0
             fi
-            echo "[$i/18] still exists..."
+            echo "[$i/60] still exists..."
             sleep 10
           done
-          echo "ERROR: ALB not deleted after 3 minutes"
+          echo "ERROR: ALB not deleted after 10 minutes"
           exit 1
 
       - name: Cleanup - stop Rundeck
