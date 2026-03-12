@@ -1,0 +1,103 @@
+name: E2E Setup
+description: >
+  Composite action: checkout, setup-uv, install yc CLI, configure yc,
+  start Rundeck, wait for API token, setup Terraform, terraform apply.
+
+inputs:
+  image_tag:
+    description: Docker image tag to deploy
+    required: true
+  sa_key:
+    description: Yandex Cloud service account key (JSON string)
+    required: true
+  folder_id:
+    description: Yandex Cloud folder ID
+    required: true
+  resource_types:
+    description: >
+      JSON object of resource types to enable in Terraform, e.g.
+      {"compute-instance":{"enabled":true},"managed-postgresql":{"enabled":true}}
+    required: true
+
+outputs:
+  rundeck_token:
+    description: Rundeck API token
+    value: ${{ steps.token.outputs.rundeck_token }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v6
+
+    - uses: astral-sh/setup-uv@v7
+
+    - name: Install yc CLI
+      shell: bash
+      run: curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | sudo bash -s -- -i /usr/local -n
+
+    - name: Configure yc CLI
+      shell: bash
+      env:
+        SA_KEY: ${{ inputs.sa_key }}
+        FOLDER_ID: ${{ inputs.folder_id }}
+      run: |
+        echo "$SA_KEY" > /tmp/sa-key.json
+        yc config set service-account-key /tmp/sa-key.json
+        yc config set folder-id "$FOLDER_ID"
+
+    - name: Start Rundeck
+      shell: bash
+      run: |
+        docker run -d --name rundeck \
+          -p 4440:4440 \
+          ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}
+
+    - name: Wait for Rundeck and create API token
+      id: token
+      shell: bash
+      run: |
+        for i in $(seq 1 60); do
+          STATUS=$(curl -s -c /tmp/rundeck-cookie.txt -o /dev/null -w "%{http_code}" \
+            --max-redirs 0 \
+            -X POST \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "j_username=admin&j_password=admin" \
+            "http://localhost:4440/j_security_check" 2>/dev/null || echo "000")
+          echo "Attempt $i/60, login status: $STATUS"
+          if [ "$STATUS" = "302" ]; then
+            echo "Rundeck ready"
+            break
+          fi
+          sleep 5
+        done
+        [ "$STATUS" = "302" ] || { docker logs rundeck; exit 1; }
+
+        TOKEN=$(curl -sf -b /tmp/rundeck-cookie.txt \
+          -X POST \
+          "http://localhost:4440/api/57/tokens/admin" \
+          -H "Accept: application/json" \
+          -H "Content-Type: application/json" \
+          -d '{"roles":"admin"}' \
+          | jq -r '.token')
+        echo "rundeck_token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+    - uses: hashicorp/setup-terraform@v4
+
+    - name: Terraform apply
+      shell: bash
+      env:
+        RUNDECK_TOKEN: ${{ steps.token.outputs.rundeck_token }}
+        FOLDER_ID: ${{ inputs.folder_id }}
+        RESOURCE_TYPES: ${{ inputs.resource_types }}
+      run: |
+        cd examples/configuration/terraform-rundeck-yc-scheduler
+        for i in 1 2 3; do terraform init -input=false && break || { echo "terraform init attempt $i failed, retrying..."; sleep 10; }; done
+        SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
+        export TF_VAR_rundeck_url="http://localhost:4440"
+        export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
+        export TF_VAR_projects=$(jq -n \
+          --arg folder_id "$FOLDER_ID" \
+          --arg sa_key "$SA_KEY_B64" \
+          --argjson resource_types "$RESOURCE_TYPES" \
+          '[{"name":"e2e","folder_id":$folder_id,"yc_sa_key":$sa_key,"resource_types":$resource_types}]')
+        terraform apply -auto-approve -input=false
