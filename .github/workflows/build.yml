@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ['*']
     paths:
       - 'Dockerfile'
       - 'plugin/**'
@@ -49,6 +50,7 @@ jobs:
           tags: |
             type=ref,event=pr,prefix=pr-
             type=raw,value=staging,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
 
       - name: Build and push
         uses: docker/build-push-action@v7
