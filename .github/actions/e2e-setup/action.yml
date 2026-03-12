@@ -82,15 +82,23 @@ runs:
 
     - uses: hashicorp/setup-terraform@v4
 
+    - name: Cache Terraform providers
+      uses: actions/cache@v4
+      with:
+        path: ~/.terraform.d/plugin-cache
+        key: terraform-providers-${{ hashFiles('examples/configuration/terraform-rundeck-yc-scheduler/.terraform.lock.hcl') }}
+
     - name: Terraform apply
       shell: bash
       env:
         RUNDECK_TOKEN: ${{ steps.token.outputs.rundeck_token }}
         FOLDER_ID: ${{ inputs.folder_id }}
         RESOURCE_TYPES: ${{ inputs.resource_types }}
+        TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
       run: |
+        mkdir -p ~/.terraform.d/plugin-cache
         cd examples/configuration/terraform-rundeck-yc-scheduler
-        for i in 1 2 3; do terraform init -input=false && break || { echo "terraform init attempt $i failed, retrying..."; sleep 10; }; done
+        terraform init -input=false || terraform init -input=false || terraform init -input=false || exit 1
         SA_KEY_B64=$(base64 -w 0 /tmp/sa-key.json)
         export TF_VAR_rundeck_url="http://localhost:4440"
         export TF_VAR_rundeck_auth_token="$RUNDECK_TOKEN"
