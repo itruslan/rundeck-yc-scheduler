@@ -362,15 +362,15 @@ jobs:
         run: |
           source tests/e2e/yc.sh
 
-          verify_status compute-instance          "$(cat /tmp/e2e/compute-instance.id)"          STOPPED &  P1=$!
-          verify_status managed-postgresql        "$(cat /tmp/e2e/managed-postgresql.id)"        STOPPED &  P2=$!
+          verify_status compute-instance          "$(cat /tmp/e2e/compute-instance.id)"          STOPPED 40 15 &  P1=$!
+          verify_status managed-postgresql        "$(cat /tmp/e2e/managed-postgresql.id)"        STOPPED 40 15 &  P2=$!
           verify_status managed-kubernetes        "$(cat /tmp/e2e/managed-kubernetes.id)"        STOPPED 40 15 &  P3=$!
-          verify_status network-load-balancer     "$(cat /tmp/e2e/network-load-balancer.id)"     STOPPED &  P4=$!
-          verify_status managed-kafka             "$(cat /tmp/e2e/managed-kafka.id)"             STOPPED &  P5=$!
-          verify_status application-load-balancer "$(cat /tmp/e2e/application-load-balancer.id)" STOPPED &  P6=$!
-          verify_status managed-redis             "$(cat /tmp/e2e/managed-redis.id)"             STOPPED &  P7=$!
-          verify_status managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        STOPPED &  P8=$!
-          verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             STOPPED &  P9=$!
+          verify_status network-load-balancer     "$(cat /tmp/e2e/network-load-balancer.id)"     STOPPED 40 15 &  P4=$!
+          verify_status managed-kafka             "$(cat /tmp/e2e/managed-kafka.id)"             STOPPED 40 15 &  P5=$!
+          verify_status application-load-balancer "$(cat /tmp/e2e/application-load-balancer.id)" STOPPED 40 15 &  P6=$!
+          verify_status managed-redis             "$(cat /tmp/e2e/managed-redis.id)"             STOPPED 40 15 &  P7=$!
+          verify_status managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        STOPPED 40 15 &  P8=$!
+          verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             STOPPED 40 15 &  P9=$!
 
           FAILED=0
           wait $P1; [ $? -eq 0 ] && echo pass > /tmp/e2e/compute-instance.stop          || { echo fail > /tmp/e2e/compute-instance.stop;          FAILED=1; }
@@ -410,12 +410,12 @@ jobs:
         run: |
           source tests/e2e/yc.sh
 
-          verify_status compute-instance          "$(cat /tmp/e2e/compute-instance.id)"          RUNNING 12 10 &  P1=$!
+          verify_status compute-instance          "$(cat /tmp/e2e/compute-instance.id)"          RUNNING 40 15 &  P1=$!
           verify_status managed-postgresql        "$(cat /tmp/e2e/managed-postgresql.id)"        RUNNING 40 15 &  P2=$!
-          verify_status managed-kubernetes        "$(cat /tmp/e2e/managed-kubernetes.id)"        RUNNING 60 15 &  P3=$!
-          verify_status network-load-balancer     "$(cat /tmp/e2e/network-load-balancer.id)"     ACTIVE  12 10 &  P4=$!
+          verify_status managed-kubernetes        "$(cat /tmp/e2e/managed-kubernetes.id)"        RUNNING 40 15 &  P3=$!
+          verify_status network-load-balancer     "$(cat /tmp/e2e/network-load-balancer.id)"     ACTIVE  40 15 &  P4=$!
           verify_status managed-kafka             "$(cat /tmp/e2e/managed-kafka.id)"             RUNNING 40 15 &  P5=$!
-          verify_status application-load-balancer "$(cat /tmp/e2e/application-load-balancer.id)" ACTIVE  18 10 &  P6=$!
+          verify_status application-load-balancer "$(cat /tmp/e2e/application-load-balancer.id)" ACTIVE  40 15 &  P6=$!
           verify_status managed-redis             "$(cat /tmp/e2e/managed-redis.id)"             RUNNING 40 15 &  P7=$!
           verify_status managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        RUNNING 40 15 &  P8=$!
           verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             RUNNING 40 15 &  P9=$!
