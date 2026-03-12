@@ -40,6 +40,8 @@ from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2 as ch_cluster_ser
 from yandex.cloud.mdb.clickhouse.v1 import cluster_service_pb2_grpc as ch_cluster_service_pb2_grpc
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2 as kafka_cluster_service_pb2
 from yandex.cloud.mdb.kafka.v1 import cluster_service_pb2_grpc as kafka_cluster_service_pb2_grpc
+from yandex.cloud.mdb.mysql.v1 import cluster_service_pb2 as mysql_cluster_service_pb2
+from yandex.cloud.mdb.mysql.v1 import cluster_service_pb2_grpc as mysql_cluster_service_pb2_grpc
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
@@ -59,6 +61,9 @@ from yc_common import (
     KAFKA_RUNNING,
     KAFKA_STOPPED,
     KAFKA_STOPPING,
+    MYSQL_RUNNING,
+    MYSQL_STOPPED,
+    MYSQL_STOPPING,
     NLB_ACTIVE,
     NLB_STOPPED,
     NLB_STOPPING,
@@ -198,6 +203,31 @@ def start_kafka_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
     print(f"Cluster {cluster_id} started.")
 
 
+def start_mysql_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+    svc = sdk.client(mysql_cluster_service_pb2_grpc.ClusterServiceStub)
+
+    try:
+        cluster = svc.Get(mysql_cluster_service_pb2.GetClusterRequest(cluster_id=cluster_id))
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            print(f"Cluster {cluster_id} not found, skipping.")
+            return
+        raise
+    status = cluster.status
+
+    if status == MYSQL_RUNNING:
+        print(f"Cluster {cluster_id} is already running.")
+        return
+    if status not in (MYSQL_STOPPED, MYSQL_STOPPING):
+        print(f"Cluster {cluster_id} is in status {status}, skipping.")
+        return
+
+    print(f"Starting managed-mysql cluster {cluster_id}...")
+    op = svc.Start(mysql_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
+    wait_for_operation(sdk, op.id)
+    print(f"Cluster {cluster_id} started.")
+
+
 def start_redis_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
     svc = sdk.client(redis_cluster_service_pb2_grpc.ClusterServiceStub)
 
@@ -301,6 +331,8 @@ def main() -> None:
                 start_kafka_cluster(sdk, args.id)
             case "managed-clickhouse":
                 start_clickhouse_cluster(sdk, args.id)
+            case "managed-mysql":
+                start_mysql_cluster(sdk, args.id)
             case "managed-redis":
                 start_redis_cluster(sdk, args.id)
             case "network-load-balancer":

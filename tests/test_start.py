@@ -21,6 +21,9 @@ from yc_common import (
     KAFKA_RUNNING,
     KAFKA_STOPPED,
     KAFKA_STOPPING,
+    MYSQL_RUNNING,
+    MYSQL_STOPPED,
+    MYSQL_STOPPING,
     NLB_ACTIVE,
     NLB_STOPPED,
     PG_RUNNING,
@@ -422,3 +425,54 @@ class TestStartRedisCluster:
 
         with pytest.raises(grpc.RpcError):
             start.start_redis_cluster(mock_sdk, "cluster-id")
+
+
+class TestStartMysqlCluster:
+    def test_already_running_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=MYSQL_RUNNING)
+        mock_sdk.client.return_value = svc
+
+        start.start_mysql_cluster(mock_sdk, "cluster-id")
+
+        svc.Start.assert_not_called()
+
+    def test_starts_stopped_cluster(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=MYSQL_STOPPED)
+        svc.Start.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("start.wait_for_operation")
+
+        start.start_mysql_cluster(mock_sdk, "cluster-id")
+
+        svc.Start.assert_called_once()
+        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+
+    def test_starts_stopping_cluster(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=MYSQL_STOPPING)
+        svc.Start.return_value = MagicMock(id="op-2")
+        mock_sdk.client.return_value = svc
+        mocker.patch("start.wait_for_operation")
+
+        start.start_mysql_cluster(mock_sdk, "cluster-id")
+
+        svc.Start.assert_called_once()
+
+    def test_not_found_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.NOT_FOUND)
+        mock_sdk.client.return_value = svc
+
+        start.start_mysql_cluster(mock_sdk, "cluster-id")
+
+        svc.Start.assert_not_called()
+
+    def test_other_rpc_error_raises(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.UNAVAILABLE)
+        mock_sdk.client.return_value = svc
+
+        with pytest.raises(grpc.RpcError):
+            start.start_mysql_cluster(mock_sdk, "cluster-id")
