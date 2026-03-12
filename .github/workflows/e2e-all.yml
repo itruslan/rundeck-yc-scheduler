@@ -63,7 +63,7 @@ jobs:
             --cores 2 \
             --memory 1GB \
             --core-fraction 20 \
-            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=networ-ssd" \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-ssd" \
             --network-interface "subnet-id=$SUBNET_ID" \
             --labels "for-test=true" \
             --async
@@ -84,7 +84,7 @@ jobs:
             --environment prestable \
             --postgresql-version 16 \
             --resource-preset c3-c2-m4 \
-            --disk-type networ-ssd \
+            --disk-type network-ssd \
             --disk-size 10 \
             --host "zone-id=$ZONE,subnet-id=$SUBNET_ID" \
             --user "name=appuser,password=$PG_PASSWORD" \
@@ -131,7 +131,7 @@ jobs:
             --cores 2 \
             --memory 1GB \
             --core-fraction 20 \
-            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=networ-ssd" \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-ssd" \
             --network-interface "subnet-id=$SUBNET_ID" \
             --labels "for-test=true" \
             --async
@@ -195,7 +195,7 @@ jobs:
             --zone-ids "$ZONE" \
             --subnet-ids "$SUBNET_ID" \
             --resource-preset b3-c1-m4 \
-            --disk-type networ-ssd \
+            --disk-type network-ssd \
             --disk-size 10 \
             --brokers-count 1 \
             --labels "for-test=true" \

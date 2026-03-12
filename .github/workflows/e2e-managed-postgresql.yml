@@ -56,7 +56,7 @@ jobs:
             --environment prestable \
             --postgresql-version 16 \
             --resource-preset c3-c2-m4 \
-            --disk-type networ-ssd \
+            --disk-type network-ssd \
             --disk-size 10 \
             --host "zone-id=$ZONE,subnet-id=$SUBNET_ID" \
             --user "name=appuser,password=$PG_PASSWORD" \

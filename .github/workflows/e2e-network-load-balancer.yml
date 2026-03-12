@@ -58,7 +58,7 @@ jobs:
             --cores 2 \
             --memory 1GB \
             --core-fraction 20 \
-            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=networ-ssd" \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-ssd" \
             --network-interface "subnet-id=$SUBNET_ID" \
             --labels "for-test=true" \
             --async

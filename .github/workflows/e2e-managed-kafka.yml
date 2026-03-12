@@ -57,7 +57,7 @@ jobs:
             --zone-ids "$ZONE" \
             --subnet-ids "$SUBNET_ID" \
             --resource-preset b3-c1-m4 \
-            --disk-type networ-ssd \
+            --disk-type network-ssd \
             --disk-size 10 \
             --brokers-count 1 \
             --labels "for-test=true" \
