@@ -1,7 +1,8 @@
 name: E2E Setup
 description: >
-  Composite action: checkout, setup-uv, install yc CLI, configure yc,
+  Composite action: setup-uv, install yc CLI, configure yc,
   start Rundeck, wait for API token, setup Terraform, terraform apply.
+  Requires actions/checkout to be run before this action.
 
 inputs:
   image_tag:
@@ -27,8 +28,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v6
-
     - uses: astral-sh/setup-uv@v7
 
     - name: Install yc CLI

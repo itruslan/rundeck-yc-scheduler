@@ -29,6 +29,8 @@ jobs:
       INSTANCE_NAME: ${{ github.event.repository.name }}-compute-instance-${{ github.run_id }}
 
     steps:
+      - uses: actions/checkout@v6
+
       - name: E2E setup
         uses: ./.github/actions/e2e-setup
         with:

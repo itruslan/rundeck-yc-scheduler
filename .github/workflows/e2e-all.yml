@@ -23,6 +23,8 @@ jobs:
       # ------------------------------------------------------------------
       # Phase 1: Setup — 1 Rundeck + Terraform with ALL resource types
       # ------------------------------------------------------------------
+      - uses: actions/checkout@v6
+
       - name: E2E setup
         uses: ./.github/actions/e2e-setup
         id: setup
