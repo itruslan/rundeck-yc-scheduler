@@ -1,8 +1,7 @@
 # rundeck-yc-scheduler
 
 [![Build](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/build.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/build.yml)
-[![E2E Tests](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e.yml)
-[![E2E All Resources](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e-all.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e-all.yml)
+[![E2E](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e-all.yml/badge.svg)](https://github.com/itruslan/rundeck-yc-scheduler/actions/workflows/e2e-all.yml)
 
 Scheduled start/stop of [Yandex Cloud](https://yandex.cloud/) resources via [Rundeck](https://www.rundeck.com/). Cut costs on non-production environments without changing your infrastructure.
 
