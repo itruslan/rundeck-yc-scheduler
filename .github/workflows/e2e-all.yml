@@ -1,4 +1,5 @@
 name: E2E Tests (all resources)
+run-name: "E2E all resources — ${{ inputs.image_tag }}"
 
 on:
   workflow_dispatch:
