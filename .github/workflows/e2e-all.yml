@@ -412,7 +412,22 @@ jobs:
           wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
 
       # ------------------------------------------------------------------
-      # Phase 11: Cleanup — always, delete all resources in parallel
+      # Phase 11: Capture final statuses (before cleanup)
+      # ------------------------------------------------------------------
+      - name: Capture final statuses
+        if: always()
+        run: |
+          source tests/e2e/yc.sh
+          for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql; do
+            if [ -f "/tmp/e2e/$type.id" ]; then
+              cmd=$(_yc_get_cmd "$type")
+              STATUS=$($cmd --id "$(cat /tmp/e2e/$type.id)" --format json 2>/dev/null | jq -r '.status // "n/a"')
+              echo "$STATUS" > "/tmp/e2e/$type.status"
+            fi
+          done
+
+      # ------------------------------------------------------------------
+      # Phase 12: Cleanup — always, delete all resources in parallel
       # ------------------------------------------------------------------
       - name: Cleanup - delete all resources
         if: always()
@@ -439,10 +454,11 @@ jobs:
         run: |
           echo "## E2E All Resources" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Resource | ID |" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`${{ inputs.image_tag }}\`. Tested stop/start lifecycle for all 9 resource types in parallel." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Resource | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| image_tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
           for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql; do
-            ID=$(cat "/tmp/e2e/$type.id" 2>/dev/null || echo "n/a")
-            echo "| $type | \`$ID\` |" >> "$GITHUB_STEP_SUMMARY"
+            STATUS=$(cat "/tmp/e2e/$type.status" 2>/dev/null || echo "not created")
+            echo "| $type | $STATUS |" >> "$GITHUB_STEP_SUMMARY"
           done

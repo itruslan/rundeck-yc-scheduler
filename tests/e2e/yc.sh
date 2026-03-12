@@ -37,11 +37,11 @@ wait_running() {
   ready=$(_yc_ready_status "$type")
   for i in $(seq 1 "$max"); do
     STATUS=$($cmd --id "$id" --format json | jq -r '.status')
-    echo "[$i/$max] status: $STATUS"
+    echo "[$type $i/$max] status: $STATUS"
     if [ "$STATUS" = "$ready" ]; then return 0; fi
     sleep "$sleep_s"
   done
-  echo "Timed out waiting for $ready"
+  echo "[$type] Timed out waiting for $ready"
   return 1
 }
 
@@ -70,11 +70,11 @@ wait_backup() {
   for i in $(seq 1 "$max"); do
     STATUS=$($list_cmd --format json | jq -r --arg id "$id" \
       '[.[] | select(.source_cluster_id==$id and .status=="DONE")][0].status // "NONE"')
-    echo "[$i/$max] backup status: $STATUS"
-    if [ "$STATUS" = "DONE" ]; then echo "Backup ready"; return 0; fi
+    echo "[$type $i/$max] backup status: $STATUS"
+    if [ "$STATUS" = "DONE" ]; then echo "[$type] Backup ready"; return 0; fi
     sleep "$sleep_s"
   done
-  echo "Timed out waiting for backup"
+  echo "[$type] Timed out waiting for backup"
   return 1
 }
 
@@ -88,10 +88,10 @@ verify_status() {
   cmd=$(_yc_get_cmd "$type") || return 1
   for i in $(seq 1 "$max"); do
     STATUS=$($cmd --id "$id" --format json | jq -r '.status')
-    echo "[$i/$max] status: $STATUS"
+    echo "[$type $i/$max] status: $STATUS"
     if [ "$STATUS" = "$expected" ]; then return 0; fi
     [ "$i" -lt "$max" ] && sleep "$sleep_s"
   done
-  echo "Expected $expected, got $STATUS"
+  echo "[$type] Expected $expected, got $STATUS"
   return 1
 }
