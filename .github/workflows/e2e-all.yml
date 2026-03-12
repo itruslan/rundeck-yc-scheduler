@@ -372,7 +372,17 @@ jobs:
           verify_status managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        STOPPED &  P8=$!
           verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             STOPPED &  P9=$!
 
-          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+          FAILED=0
+          wait $P1; [ $? -eq 0 ] && echo pass > /tmp/e2e/compute-instance.stop          || { echo fail > /tmp/e2e/compute-instance.stop;          FAILED=1; }
+          wait $P2; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-postgresql.stop        || { echo fail > /tmp/e2e/managed-postgresql.stop;        FAILED=1; }
+          wait $P3; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-kubernetes.stop        || { echo fail > /tmp/e2e/managed-kubernetes.stop;        FAILED=1; }
+          wait $P4; [ $? -eq 0 ] && echo pass > /tmp/e2e/network-load-balancer.stop     || { echo fail > /tmp/e2e/network-load-balancer.stop;     FAILED=1; }
+          wait $P5; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-kafka.stop             || { echo fail > /tmp/e2e/managed-kafka.stop;             FAILED=1; }
+          wait $P6; [ $? -eq 0 ] && echo pass > /tmp/e2e/application-load-balancer.stop || { echo fail > /tmp/e2e/application-load-balancer.stop; FAILED=1; }
+          wait $P7; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-redis.stop             || { echo fail > /tmp/e2e/managed-redis.stop;             FAILED=1; }
+          wait $P8; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-clickhouse.stop        || { echo fail > /tmp/e2e/managed-clickhouse.stop;        FAILED=1; }
+          wait $P9; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-mysql.stop             || { echo fail > /tmp/e2e/managed-mysql.stop;             FAILED=1; }
+          [ $FAILED -eq 0 ]
 
       # ------------------------------------------------------------------
       # Phase 9: Start tests — all in parallel
@@ -410,7 +420,17 @@ jobs:
           verify_status managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        RUNNING 40 15 &  P8=$!
           verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             RUNNING 40 15 &  P9=$!
 
-          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+          FAILED=0
+          wait $P1; [ $? -eq 0 ] && echo pass > /tmp/e2e/compute-instance.start          || { echo fail > /tmp/e2e/compute-instance.start;          FAILED=1; }
+          wait $P2; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-postgresql.start        || { echo fail > /tmp/e2e/managed-postgresql.start;        FAILED=1; }
+          wait $P3; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-kubernetes.start        || { echo fail > /tmp/e2e/managed-kubernetes.start;        FAILED=1; }
+          wait $P4; [ $? -eq 0 ] && echo pass > /tmp/e2e/network-load-balancer.start     || { echo fail > /tmp/e2e/network-load-balancer.start;     FAILED=1; }
+          wait $P5; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-kafka.start             || { echo fail > /tmp/e2e/managed-kafka.start;             FAILED=1; }
+          wait $P6; [ $? -eq 0 ] && echo pass > /tmp/e2e/application-load-balancer.start || { echo fail > /tmp/e2e/application-load-balancer.start; FAILED=1; }
+          wait $P7; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-redis.start             || { echo fail > /tmp/e2e/managed-redis.start;             FAILED=1; }
+          wait $P8; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-clickhouse.start        || { echo fail > /tmp/e2e/managed-clickhouse.start;        FAILED=1; }
+          wait $P9; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-mysql.start             || { echo fail > /tmp/e2e/managed-mysql.start;             FAILED=1; }
+          [ $FAILED -eq 0 ]
 
       # ------------------------------------------------------------------
       # Phase 11: Capture final statuses (before cleanup)
@@ -457,9 +477,14 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Image: \`${{ inputs.image_tag }}\`. Tested stop/start lifecycle for all 9 resource types in parallel." >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Resource | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Resource | Stop | Start |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
           for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql; do
-            STATUS=$(cat "/tmp/e2e/$type.status" 2>/dev/null || echo "not created")
-            echo "| $type | $STATUS |" >> "$GITHUB_STEP_SUMMARY"
+            stop=$(cat "/tmp/e2e/$type.stop"  2>/dev/null || echo "—")
+            start=$(cat "/tmp/e2e/$type.start" 2>/dev/null || echo "—")
+            [ "$stop"  = pass ] && stop_icon="✅"  || stop_icon="❌"
+            [ "$start" = pass ] && start_icon="✅" || start_icon="❌"
+            [ "$stop"  = "—"  ] && stop_icon="—"
+            [ "$start" = "—"  ] && start_icon="—"
+            echo "| $type | $stop_icon | $start_icon |" >> "$GITHUB_STEP_SUMMARY"
           done
