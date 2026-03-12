@@ -7,79 +7,44 @@ on:
         description: Docker image tag to test
         type: string
         default: staging
+      application_load_balancer:
+        description: application-load-balancer
+        type: boolean
+        default: false
       compute_instance:
         description: compute-instance
         type: boolean
         default: true
-      managed_postgresql:
-        description: managed-postgresql
-        type: boolean
-        default: false
-      managed_kubernetes:
-        description: managed-kubernetes
-        type: boolean
-        default: false
-      network_load_balancer:
-        description: network-load-balancer
+      managed_clickhouse:
+        description: managed-clickhouse
         type: boolean
         default: false
       managed_kafka:
         description: managed-kafka
         type: boolean
         default: false
-      application_load_balancer:
-        description: application-load-balancer
-        type: boolean
-        default: false
-      managed_redis:
-        description: managed-redis
-        type: boolean
-        default: false
-      managed_clickhouse:
-        description: managed-clickhouse
+      managed_kubernetes:
+        description: managed-kubernetes
         type: boolean
         default: false
       managed_mysql:
         description: managed-mysql
         type: boolean
         default: false
+      managed_postgresql:
+        description: managed-postgresql
+        type: boolean
+        default: false
+      managed_redis:
+        description: managed-redis
+        type: boolean
+        default: false
+      network_load_balancer:
+        description: network-load-balancer
+        type: boolean
+        default: false
 
 jobs:
-  compute-instance:
-    if: ${{ inputs.compute_instance }}
-    uses: ./.github/workflows/e2e-compute-instance.yml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-    secrets: inherit
-
-  managed-postgresql:
-    if: ${{ inputs.managed_postgresql }}
-    uses: ./.github/workflows/e2e-managed-postgresql.yml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-    secrets: inherit
-
-  managed-kubernetes:
-    if: ${{ inputs.managed_kubernetes }}
-    uses: ./.github/workflows/e2e-managed-kubernetes.yml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-    secrets: inherit
-
-  network-load-balancer:
-    if: ${{ inputs.network_load_balancer }}
-    uses: ./.github/workflows/e2e-network-load-balancer.yml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-    secrets: inherit
-
-  managed-kafka:
-    if: ${{ inputs.managed_kafka }}
-    uses: ./.github/workflows/e2e-managed-kafka.yml
-    with:
-      image_tag: ${{ inputs.image_tag }}
-    secrets: inherit
-
   application-load-balancer:
     if: ${{ inputs.application_load_balancer }}
     uses: ./.github/workflows/e2e-application-load-balancer.yml
@@ -87,9 +52,9 @@ jobs:
       image_tag: ${{ inputs.image_tag }}
     secrets: inherit
 
-  managed-redis:
-    if: ${{ inputs.managed_redis }}
-    uses: ./.github/workflows/e2e-managed-redis.yml
+  compute-instance:
+    if: ${{ inputs.compute_instance }}
+    uses: ./.github/workflows/e2e-compute-instance.yml
     with:
       image_tag: ${{ inputs.image_tag }}
     secrets: inherit
@@ -101,9 +66,44 @@ jobs:
       image_tag: ${{ inputs.image_tag }}
     secrets: inherit
 
+  managed-kafka:
+    if: ${{ inputs.managed_kafka }}
+    uses: ./.github/workflows/e2e-managed-kafka.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
+  managed-kubernetes:
+    if: ${{ inputs.managed_kubernetes }}
+    uses: ./.github/workflows/e2e-managed-kubernetes.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
   managed-mysql:
     if: ${{ inputs.managed_mysql }}
     uses: ./.github/workflows/e2e-managed-mysql.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
+  managed-postgresql:
+    if: ${{ inputs.managed_postgresql }}
+    uses: ./.github/workflows/e2e-managed-postgresql.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
+  managed-redis:
+    if: ${{ inputs.managed_redis }}
+    uses: ./.github/workflows/e2e-managed-redis.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
+  network-load-balancer:
+    if: ${{ inputs.network_load_balancer }}
+    uses: ./.github/workflows/e2e-network-load-balancer.yml
     with:
       image_tag: ${{ inputs.image_tag }}
     secrets: inherit
