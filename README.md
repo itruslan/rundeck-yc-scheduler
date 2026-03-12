@@ -5,6 +5,10 @@
 
 Scheduled start/stop of [Yandex Cloud](https://yandex.cloud/) resources via [Rundeck](https://www.rundeck.com/). Cut costs on non-production environments without changing your infrastructure.
 
+<p align="center">
+  <img src="rundeck.png" alt="Rundeck example" width="800">
+</p>
+
 ## How it works
 
 ```text
