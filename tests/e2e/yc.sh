@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 # Reusable YC CLI helper functions for E2E tests.
 # Source this file: source tests/e2e/yc.sh
 
