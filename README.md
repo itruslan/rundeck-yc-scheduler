@@ -44,11 +44,11 @@ All operations are idempotent — resources already in the target state are skip
 | `managed-kafka` | ✅ done | 0.2.0 |
 | `application-load-balancer` | ✅ done | 0.3.0 |
 | `managed-redis` | ✅ done | 0.4.0 |
-| `managed-mysql` | 🔜 planned | — |
+| `managed-clickhouse` | ✅ done | 0.5.0 |
+| `managed-mysql` | ✅ done | 0.6.0 |
 | `managed-opensearch` | 🔜 planned | — |
 | `managed-mongodb` | 🔜 planned | — |
 | `ydb` | 🔜 planned | — |
-| `managed-clickhouse` | ✅ done | 0.5.0 |
 
 ## Quick start
 
