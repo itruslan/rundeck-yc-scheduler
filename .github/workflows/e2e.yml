@@ -1745,6 +1745,23 @@ jobs:
           echo "Timed out waiting for RUNNING"
           exit 1
 
+      - name: Create manual backup and wait for completion
+        run: |
+          yc managed-mysql cluster backup --id "${{ steps.resource.outputs.cluster_id }}"
+          for i in $(seq 1 30); do
+            STATUS=$(yc managed-mysql backup list \
+              --format json | jq -r --arg id "${{ steps.resource.outputs.cluster_id }}" \
+              '[.[] | select(.source_cluster_id==$id and .status=="DONE")][0].status // "NONE"')
+            echo "[$i/30] backup status: $STATUS"
+            if [ "$STATUS" = "DONE" ]; then
+              echo "Backup ready"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for backup"
+          exit 1
+
       - name: Wait for node in Rundeck
         run: |
           uv run tests/e2e/rundeck.py wait-node \
