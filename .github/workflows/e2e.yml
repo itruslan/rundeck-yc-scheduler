@@ -8,39 +8,39 @@ on:
         type: string
         default: staging
       compute_instance:
-        description: Test compute instances
+        description: compute-instance
         type: boolean
         default: true
       managed_postgresql:
-        description: Test managed PostgreSQL (~5 min)
+        description: managed-postgresql
         type: boolean
         default: false
       managed_kubernetes:
-        description: Test Managed Kubernetes (~15 min)
+        description: managed-kubernetes
         type: boolean
         default: false
       network_load_balancer:
-        description: Test Network Load Balancers
+        description: network-load-balancer
         type: boolean
         default: false
       managed_kafka:
-        description: Test Managed Kafka (~10 min)
+        description: managed-kafka
         type: boolean
         default: false
       application_load_balancer:
-        description: Test Application Load Balancers
+        description: application-load-balancer
         type: boolean
         default: false
       managed_redis:
-        description: Test Managed Redis (~5 min)
+        description: managed-redis
         type: boolean
         default: false
       managed_clickhouse:
-        description: Test Managed ClickHouse (~10 min)
+        description: managed-clickhouse
         type: boolean
         default: false
       managed_mysql:
-        description: Test Managed MySQL (~5 min)
+        description: managed-mysql
         type: boolean
         default: false
 
