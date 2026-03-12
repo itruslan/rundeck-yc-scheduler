@@ -1,0 +1,136 @@
+name: E2E / application-load-balancer
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        type: string
+        required: true
+    secrets:
+      E2E_YC_SA_KEY:
+        required: true
+      E2E_YC_FOLDER_ID:
+        required: true
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag to test
+        type: string
+        default: staging
+
+jobs:
+  test-application-load-balancer:
+    name: application-load-balancer
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      ALB_NAME: ${{ github.event.repository.name }}-alb-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          image_tag: ${{ inputs.image_tag }}
+          sa_key: ${{ secrets.E2E_YC_SA_KEY }}
+          folder_id: ${{ secrets.E2E_YC_FOLDER_ID }}
+          resource_types: '{"application-load-balancer":{"enabled":true}}'
+        id: setup
+
+      - name: Create Application Load Balancer
+        id: resource
+        run: |
+          SUBNET=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0]')
+          SUBNET_ID=$(echo "$SUBNET" | jq -r '.id')
+          NETWORK_ID=$(echo "$SUBNET" | jq -r '.network_id')
+          echo "Using network: $NETWORK_ID, subnet: $SUBNET_ID"
+          yc alb load-balancer create \
+            --name "$ALB_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --location "zone=$ZONE,subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+          ALB_ID=$(yc alb load-balancer get --name "$ALB_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "alb_id=$ALB_ID" >> "$GITHUB_OUTPUT"
+          echo "ALB ID: $ALB_ID"
+
+      - name: Wait for ALB ACTIVE
+        run: |
+          source tests/e2e/yc.sh
+          wait_running application-load-balancer "${{ steps.resource.outputs.alb_id }}" 60 10
+
+      - name: Wait for ALB node in Rundeck
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.resource.outputs.alb_id }}"
+
+      - name: Run stop job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/application-load-balancer \
+            --name Stop \
+            --resource-id "${{ steps.resource.outputs.alb_id }}"
+
+      - name: Verify STOPPED in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status application-load-balancer "${{ steps.resource.outputs.alb_id }}" STOPPED
+
+      - name: Run start job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/application-load-balancer \
+            --name Start \
+            --resource-id "${{ steps.resource.outputs.alb_id }}"
+
+      - name: Verify ACTIVE in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status application-load-balancer "${{ steps.resource.outputs.alb_id }}" ACTIVE 18 10
+
+      - name: Cleanup - delete ALB
+        if: always()
+        run: yc alb load-balancer delete --id "${{ steps.resource.outputs.alb_id }}" --async || true
+
+      - name: Cleanup - verify ALB deleted
+        if: always()
+        run: |
+          for i in $(seq 1 60); do
+            if ! yc alb load-balancer get --id "${{ steps.resource.outputs.alb_id }}" --format json > /dev/null 2>&1; then
+              echo "ALB deleted"
+              exit 0
+            fi
+            echo "[$i/60] still exists..."
+            sleep 10
+          done
+          echo "ERROR: ALB not deleted after 10 minutes"
+          exit 1
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: application-load-balancer" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ALB       | \`$ALB_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ALB ID    | \`${{ steps.resource.outputs.alb_id }}\` |" >> "$GITHUB_STEP_SUMMARY"

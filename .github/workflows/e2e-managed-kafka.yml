@@ -1,0 +1,146 @@
+name: E2E / managed-kafka
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        type: string
+        required: true
+    secrets:
+      E2E_YC_SA_KEY:
+        required: true
+      E2E_YC_FOLDER_ID:
+        required: true
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag to test
+        type: string
+        default: staging
+
+jobs:
+  test-managed-kafka:
+    name: managed-kafka
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      CLUSTER_NAME: ${{ github.event.repository.name }}-managed-kafka-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          image_tag: ${{ inputs.image_tag }}
+          sa_key: ${{ secrets.E2E_YC_SA_KEY }}
+          folder_id: ${{ secrets.E2E_YC_FOLDER_ID }}
+          resource_types: '{"managed-kafka":{"enabled":true}}'
+        id: setup
+
+      - name: Create Kafka cluster
+        id: resource
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
+          yc managed-kafka cluster create \
+            --name "$CLUSTER_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --environment prestable \
+            --version 4.0 \
+            --zone-ids "$ZONE" \
+            --subnet-ids "$SUBNET_ID" \
+            --resource-preset b3-c1-m4 \
+            --disk-type network-ssd \
+            --disk-size 10 \
+            --brokers-count 1 \
+            --labels "for-test=true" \
+            --async
+          CLUSTER_ID=$(yc managed-kafka cluster get --name "$CLUSTER_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "cluster_id=$CLUSTER_ID" >> "$GITHUB_OUTPUT"
+          echo "Cluster ID: $CLUSTER_ID"
+
+      - name: Wait for cluster RUNNING
+        run: |
+          source tests/e2e/yc.sh
+          wait_running managed-kafka "${{ steps.resource.outputs.cluster_id }}" 60 15
+
+      - name: Wait for node in Rundeck
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 180
+
+      - name: Run stop job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-kafka \
+            --name Stop \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 600
+
+      - name: Verify STOPPED in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status managed-kafka "${{ steps.resource.outputs.cluster_id }}" STOPPED
+
+      - name: Run start job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-kafka \
+            --name Start \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 600
+
+      - name: Verify RUNNING in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status managed-kafka "${{ steps.resource.outputs.cluster_id }}" RUNNING 40 15
+
+      - name: Cleanup - delete cluster
+        if: always()
+        run: yc managed-kafka cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
+
+      - name: Cleanup - verify cluster deleted
+        if: always()
+        run: |
+          for i in $(seq 1 30); do
+            if ! yc managed-kafka cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1; then
+              echo "Cluster deleted"
+              exit 0
+            fi
+            echo "[$i/30] still exists..."
+            sleep 10
+          done
+          echo "ERROR: Cluster not deleted after 5 minutes"
+          exit 1
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: managed-kafka" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster   | \`$CLUSTER_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster ID | \`${{ steps.resource.outputs.cluster_id }}\` |" >> "$GITHUB_STEP_SUMMARY"

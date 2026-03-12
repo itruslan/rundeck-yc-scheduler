@@ -1,0 +1,210 @@
+name: E2E / network-load-balancer
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        type: string
+        required: true
+    secrets:
+      E2E_YC_SA_KEY:
+        required: true
+      E2E_YC_FOLDER_ID:
+        required: true
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag to test
+        type: string
+        default: staging
+
+jobs:
+  test-network-load-balancer:
+    name: network-load-balancer
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      VM_NAME: ${{ github.event.repository.name }}-nlb-vm-${{ github.run_id }}
+      TG_NAME: ${{ github.event.repository.name }}-nlb-tg-${{ github.run_id }}
+      NLB_NAME: ${{ github.event.repository.name }}-nlb-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          image_tag: ${{ inputs.image_tag }}
+          sa_key: ${{ secrets.E2E_YC_SA_KEY }}
+          folder_id: ${{ secrets.E2E_YC_FOLDER_ID }}
+          resource_types: '{"network-load-balancer":{"enabled":true}}'
+        id: setup
+
+      - name: Create VM (NLB target)
+        id: vm
+        run: |
+          SUBNET=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0]')
+          SUBNET_ID=$(echo "$SUBNET" | jq -r '.id')
+          echo "subnet_id=$SUBNET_ID" >> "$GITHUB_OUTPUT"
+          echo "Using subnet: $SUBNET_ID"
+          yc compute instance create \
+            --name "$VM_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --zone "$ZONE" \
+            --platform-id standard-v3 \
+            --cores 2 \
+            --memory 1GB \
+            --core-fraction 20 \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-ssd" \
+            --network-interface "subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+          VM_ID=$(yc compute instance get --name "$VM_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "vm_id=$VM_ID" >> "$GITHUB_OUTPUT"
+          echo "VM ID: $VM_ID"
+
+      - name: Wait for VM RUNNING and get internal IP
+        id: vm_ip
+        run: |
+          for i in $(seq 1 30); do
+            INFO=$(yc compute instance get --id "${{ steps.vm.outputs.vm_id }}" --format json)
+            STATUS=$(echo "$INFO" | jq -r '.status')
+            IP=$(echo "$INFO" | jq -r '.network_interfaces[0].primary_v4_address.address // empty')
+            echo "[$i/30] status: $STATUS, ip: $IP"
+            if [ "$STATUS" = "RUNNING" ] && [ -n "$IP" ]; then
+              echo "internal_ip=$IP" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for VM RUNNING"
+          exit 1
+
+      - name: Create target group and NLB
+        id: nlb
+        run: |
+          yc load-balancer target-group create \
+            --name "$TG_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --labels "for-test=true"
+          TG_ID=$(yc load-balancer target-group get --name "$TG_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "tg_id=$TG_ID" >> "$GITHUB_OUTPUT"
+
+          yc load-balancer target-group add-targets \
+            --name "$TG_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --target "subnet-id=${{ steps.vm.outputs.subnet_id }},address=${{ steps.vm_ip.outputs.internal_ip }}"
+
+          yc load-balancer network-load-balancer create \
+            --name "$NLB_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --type internal \
+            --labels "for-test=true"
+          NLB_ID=$(yc load-balancer network-load-balancer get --name "$NLB_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "nlb_id=$NLB_ID" >> "$GITHUB_OUTPUT"
+          echo "NLB ID: $NLB_ID"
+
+          yc load-balancer network-load-balancer attach-target-group \
+            --name "$NLB_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --target-group "target-group-id=$TG_ID,healthcheck-name=tcp-22,healthcheck-tcp-port=22"
+
+          yc load-balancer network-load-balancer add-listener \
+            --name "$NLB_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --listener "name=listener-1,port=22,target-port=22,protocol=tcp,internal-subnet-id=${{ steps.vm.outputs.subnet_id }}"
+
+      - name: Wait for NLB ACTIVE
+        run: |
+          source tests/e2e/yc.sh
+          wait_running network-load-balancer "${{ steps.nlb.outputs.nlb_id }}" 30 10
+
+      - name: Wait for NLB node in Rundeck
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.nlb.outputs.nlb_id }}" \
+            --timeout 180
+
+      - name: Run stop job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/network-load-balancer \
+            --name Stop \
+            --resource-id "${{ steps.nlb.outputs.nlb_id }}"
+
+      - name: Verify STOPPED in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status network-load-balancer "${{ steps.nlb.outputs.nlb_id }}" STOPPED
+
+      - name: Run start job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/network-load-balancer \
+            --name Start \
+            --resource-id "${{ steps.nlb.outputs.nlb_id }}"
+
+      - name: Verify ACTIVE in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status network-load-balancer "${{ steps.nlb.outputs.nlb_id }}" ACTIVE 12 10
+
+      - name: Cleanup - delete NLB and target group
+        if: always()
+        run: |
+          yc load-balancer network-load-balancer delete --id "${{ steps.nlb.outputs.nlb_id }}" || true
+          yc load-balancer target-group delete --id "${{ steps.nlb.outputs.tg_id }}" || true
+
+      - name: Cleanup - verify NLB deleted
+        if: always()
+        run: |
+          if yc load-balancer network-load-balancer get --id "${{ steps.nlb.outputs.nlb_id }}" --format json > /dev/null 2>&1; then
+            echo "ERROR: NLB still exists"
+            exit 1
+          fi
+          echo "NLB deleted"
+
+      - name: Cleanup - delete VM
+        if: always()
+        run: yc compute instance delete --id "${{ steps.vm.outputs.vm_id }}" --async || true
+
+      - name: Cleanup - verify VM deleted
+        if: always()
+        run: |
+          for i in $(seq 1 18); do
+            if ! yc compute instance get --id "${{ steps.vm.outputs.vm_id }}" --format json > /dev/null 2>&1; then
+              echo "VM deleted"
+              exit 0
+            fi
+            echo "[$i/18] still exists..."
+            sleep 10
+          done
+          echo "ERROR: VM not deleted after 3 minutes"
+          exit 1
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: network-load-balancer" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NLB       | \`$NLB_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| NLB ID    | \`${{ steps.nlb.outputs.nlb_id }}\` |" >> "$GITHUB_STEP_SUMMARY"

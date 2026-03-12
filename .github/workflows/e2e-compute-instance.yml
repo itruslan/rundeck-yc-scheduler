@@ -1,0 +1,141 @@
+name: E2E / compute-instance
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        type: string
+        required: true
+    secrets:
+      E2E_YC_SA_KEY:
+        required: true
+      E2E_YC_FOLDER_ID:
+        required: true
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag to test
+        type: string
+        default: staging
+
+jobs:
+  test-compute-instance:
+    name: compute-instance
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      INSTANCE_NAME: ${{ github.event.repository.name }}-compute-instance-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          image_tag: ${{ inputs.image_tag }}
+          sa_key: ${{ secrets.E2E_YC_SA_KEY }}
+          folder_id: ${{ secrets.E2E_YC_FOLDER_ID }}
+          resource_types: '{"compute-instance":{"enabled":true}}'
+        id: setup
+
+      - name: Create compute instance
+        id: resource
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          echo "Using subnet: $SUBNET_ID"
+          yc compute instance create \
+            --name "$INSTANCE_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --zone "$ZONE" \
+            --platform-id standard-v3 \
+            --cores 2 \
+            --memory 1GB \
+            --core-fraction 20 \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-ssd" \
+            --network-interface "subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+          INSTANCE_ID=$(yc compute instance get --name "$INSTANCE_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "Instance ID: $INSTANCE_ID"
+
+      - name: Wait for instance RUNNING
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          source tests/e2e/yc.sh
+          wait_running compute-instance "${{ steps.resource.outputs.instance_id }}" 30 10
+
+      - name: Wait for node in Rundeck
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.resource.outputs.instance_id }}"
+
+      - name: Run stop job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/compute-instance \
+            --name Stop \
+            --resource-id "${{ steps.resource.outputs.instance_id }}"
+
+      - name: Verify STOPPED in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status compute-instance "${{ steps.resource.outputs.instance_id }}" STOPPED
+
+      - name: Run start job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/compute-instance \
+            --name Start \
+            --resource-id "${{ steps.resource.outputs.instance_id }}"
+
+      - name: Verify RUNNING in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status compute-instance "${{ steps.resource.outputs.instance_id }}" RUNNING 12 10
+
+      - name: Cleanup - delete instance
+        if: always()
+        run: yc compute instance delete --id "${{ steps.resource.outputs.instance_id }}" --async || true
+
+      - name: Cleanup - verify instance deleted
+        if: always()
+        run: |
+          for i in $(seq 1 18); do
+            if ! yc compute instance get --id "${{ steps.resource.outputs.instance_id }}" --format json > /dev/null 2>&1; then
+              echo "Instance deleted"
+              exit 0
+            fi
+            echo "[$i/18] still exists..."
+            sleep 10
+          done
+          echo "ERROR: Instance not deleted after 3 minutes"
+          exit 1
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: compute-instance" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance  | \`$INSTANCE_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance ID | \`${{ steps.resource.outputs.instance_id }}\` |" >> "$GITHUB_STEP_SUMMARY"

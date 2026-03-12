@@ -1,0 +1,149 @@
+name: E2E / managed-kubernetes
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        type: string
+        required: true
+    secrets:
+      E2E_YC_SA_KEY:
+        required: true
+      E2E_YC_FOLDER_ID:
+        required: true
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag to test
+        type: string
+        default: staging
+
+jobs:
+  test-managed-kubernetes:
+    name: managed-kubernetes
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      CLUSTER_NAME: ${{ github.event.repository.name }}-managed-kubernetes-${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          image_tag: ${{ inputs.image_tag }}
+          sa_key: ${{ secrets.E2E_YC_SA_KEY }}
+          folder_id: ${{ secrets.E2E_YC_FOLDER_ID }}
+          resource_types: '{"managed-kubernetes":{"enabled":true}}'
+        id: setup
+
+      - name: Create K8s cluster
+        id: resource
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
+
+          SA_ID=$(jq -r '.service_account_id' /tmp/sa-key.json)
+          echo "Using CI SA: $SA_ID"
+
+          yc managed-kubernetes cluster create \
+            --name "$CLUSTER_NAME" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --zone "$ZONE" \
+            --subnet-id "$SUBNET_ID" \
+            --service-account-id "$SA_ID" \
+            --node-service-account-id "$SA_ID" \
+            --service-ipv4-range 10.100.0.0/16 \
+            --cluster-ipv4-range 10.200.0.0/16 \
+            --cilium \
+            --labels "for-test=true" \
+            --async
+          CLUSTER_ID=$(yc managed-kubernetes cluster get --name "$CLUSTER_NAME" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "cluster_id=$CLUSTER_ID" >> "$GITHUB_OUTPUT"
+          echo "Cluster ID: $CLUSTER_ID"
+
+      - name: Wait for cluster RUNNING
+        run: |
+          source tests/e2e/yc.sh
+          wait_running managed-kubernetes "${{ steps.resource.outputs.cluster_id }}" 90 15
+
+      - name: Wait for node in Rundeck
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py wait-node \
+            --project e2e \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 180
+
+      - name: Run stop job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-kubernetes \
+            --name Stop \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 600
+
+      - name: Verify STOPPED in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status managed-kubernetes "${{ steps.resource.outputs.cluster_id }}" STOPPED 40 15
+
+      - name: Run start job
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job \
+            --project e2e \
+            --group e2e/managed-kubernetes \
+            --name Start \
+            --resource-id "${{ steps.resource.outputs.cluster_id }}" \
+            --timeout 900
+
+      - name: Verify RUNNING in YC
+        run: |
+          source tests/e2e/yc.sh
+          verify_status managed-kubernetes "${{ steps.resource.outputs.cluster_id }}" RUNNING 60 15
+
+      - name: Cleanup - delete cluster
+        if: always()
+        run: yc managed-kubernetes cluster delete --id "${{ steps.resource.outputs.cluster_id }}" --async || true
+
+      - name: Cleanup - verify cluster deleted
+        if: always()
+        run: |
+          for i in $(seq 1 90); do
+            if ! yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1; then
+              echo "Cluster deleted"
+              break
+            fi
+            echo "[$i/90] still exists..."
+            sleep 10
+          done
+          yc managed-kubernetes cluster get --id "${{ steps.resource.outputs.cluster_id }}" --format json > /dev/null 2>&1 \
+            && { echo "ERROR: Cluster not deleted after 15 minutes"; exit 1; } || true
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E: managed-kubernetes" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster   | \`$CLUSTER_NAME\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Cluster ID | \`${{ steps.resource.outputs.cluster_id }}\` |" >> "$GITHUB_STEP_SUMMARY"

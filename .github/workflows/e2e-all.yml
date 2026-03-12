@@ -1,0 +1,448 @@
+name: E2E Tests (all resources)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Docker image tag to test
+        type: string
+        default: staging
+
+jobs:
+  e2e-all:
+    name: all resources
+    runs-on: ubuntu-latest
+    env:
+      RUNDECK_URL: http://localhost:4440
+      FOLDER_ID: ${{ secrets.E2E_YC_FOLDER_ID }}
+      ZONE: ru-central1-a
+      RUN_ID: ${{ github.run_id }}
+      REPO: ${{ github.event.repository.name }}
+
+    steps:
+      # ------------------------------------------------------------------
+      # Phase 1: Setup — 1 Rundeck + Terraform with ALL resource types
+      # ------------------------------------------------------------------
+      - uses: actions/checkout@v6
+
+      - name: E2E setup
+        uses: ./.github/actions/e2e-setup
+        id: setup
+        with:
+          image_tag: ${{ inputs.image_tag }}
+          sa_key: ${{ secrets.E2E_YC_SA_KEY }}
+          folder_id: ${{ secrets.E2E_YC_FOLDER_ID }}
+          resource_types: >-
+            {
+              "compute-instance":          {"enabled":true},
+              "managed-postgresql":        {"enabled":true},
+              "managed-kubernetes":        {"enabled":true},
+              "network-load-balancer":     {"enabled":true},
+              "managed-kafka":             {"enabled":true},
+              "application-load-balancer": {"enabled":true},
+              "managed-redis":             {"enabled":true},
+              "managed-clickhouse":        {"enabled":true},
+              "managed-mysql":             {"enabled":true}
+            }
+
+      - name: Prepare ID directory
+        run: mkdir -p /tmp/e2e
+
+      # ------------------------------------------------------------------
+      # Phase 2: Create — all resources in parallel (--async)
+      # ------------------------------------------------------------------
+      - name: Create compute instance
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          yc compute instance create \
+            --name "$REPO-compute-instance-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --zone "$ZONE" \
+            --platform-id standard-v3 \
+            --cores 2 \
+            --memory 1GB \
+            --core-fraction 20 \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-ssd" \
+            --network-interface "subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+          yc compute instance get --name "$REPO-compute-instance-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/compute-instance.id
+
+      - name: Create PostgreSQL cluster
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          PG_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(12))")
+          yc managed-postgresql cluster create \
+            --name "$REPO-managed-postgresql-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --environment prestable \
+            --postgresql-version 16 \
+            --resource-preset c3-c2-m4 \
+            --disk-type network-ssd \
+            --disk-size 10 \
+            --host "zone-id=$ZONE,subnet-id=$SUBNET_ID" \
+            --user "name=appuser,password=$PG_PASSWORD" \
+            --database "name=testdb,owner=appuser" \
+            --labels "for-test=true" \
+            --async
+          yc managed-postgresql cluster get --name "$REPO-managed-postgresql-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/managed-postgresql.id
+
+      - name: Create Kubernetes cluster
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          SA_ID=$(jq -r '.service_account_id' /tmp/sa-key.json)
+          yc managed-kubernetes cluster create \
+            --name "$REPO-managed-kubernetes-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --zone "$ZONE" \
+            --subnet-id "$SUBNET_ID" \
+            --service-account-id "$SA_ID" \
+            --node-service-account-id "$SA_ID" \
+            --service-ipv4-range 10.100.0.0/16 \
+            --cluster-ipv4-range 10.200.0.0/16 \
+            --cilium \
+            --labels "for-test=true" \
+            --async
+          yc managed-kubernetes cluster get --name "$REPO-managed-kubernetes-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/managed-kubernetes.id
+
+      - name: Create NLB (VM + target group + NLB)
+        run: |
+          SUBNET=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0]')
+          SUBNET_ID=$(echo "$SUBNET" | jq -r '.id')
+
+          yc compute instance create \
+            --name "$REPO-nlb-vm-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --zone "$ZONE" \
+            --platform-id standard-v3 \
+            --cores 2 \
+            --memory 1GB \
+            --core-fraction 20 \
+            --create-boot-disk "image-folder-id=standard-images,image-family=ubuntu-2204-lts,size=10,type=network-ssd" \
+            --network-interface "subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+
+          # Wait for VM IP before creating NLB target
+          for i in $(seq 1 30); do
+            INFO=$(yc compute instance get --name "$REPO-nlb-vm-$RUN_ID" --folder-id "$FOLDER_ID" --format json)
+            STATUS=$(echo "$INFO" | jq -r '.status')
+            IP=$(echo "$INFO" | jq -r '.network_interfaces[0].primary_v4_address.address // empty')
+            echo "[$i/30] VM status: $STATUS, ip: $IP"
+            if [ "$STATUS" = "RUNNING" ] && [ -n "$IP" ]; then break; fi
+            sleep 10
+          done
+          [ -n "$IP" ] || { echo "Timed out waiting for VM IP"; exit 1; }
+
+          VM_ID=$(echo "$INFO" | jq -r '.id')
+          echo "$VM_ID" > /tmp/e2e/nlb-vm.id
+
+          yc load-balancer target-group create \
+            --name "$REPO-nlb-tg-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --labels "for-test=true"
+          TG_ID=$(yc load-balancer target-group get --name "$REPO-nlb-tg-$RUN_ID" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "$TG_ID" > /tmp/e2e/nlb-tg.id
+
+          yc load-balancer target-group add-targets \
+            --name "$REPO-nlb-tg-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --target "subnet-id=$SUBNET_ID,address=$IP"
+
+          yc load-balancer network-load-balancer create \
+            --name "$REPO-nlb-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --type internal \
+            --labels "for-test=true"
+          NLB_ID=$(yc load-balancer network-load-balancer get --name "$REPO-nlb-$RUN_ID" --folder-id "$FOLDER_ID" --format json | jq -r '.id')
+          echo "$NLB_ID" > /tmp/e2e/network-load-balancer.id
+
+          yc load-balancer network-load-balancer attach-target-group \
+            --name "$REPO-nlb-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --target-group "target-group-id=$TG_ID,healthcheck-name=tcp-22,healthcheck-tcp-port=22"
+
+          yc load-balancer network-load-balancer add-listener \
+            --name "$REPO-nlb-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --listener "name=listener-1,port=22,target-port=22,protocol=tcp,internal-subnet-id=$SUBNET_ID"
+
+      - name: Create Kafka cluster
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          yc managed-kafka cluster create \
+            --name "$REPO-managed-kafka-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --environment prestable \
+            --version 4.0 \
+            --zone-ids "$ZONE" \
+            --subnet-ids "$SUBNET_ID" \
+            --resource-preset b3-c1-m4 \
+            --disk-type network-ssd \
+            --disk-size 10 \
+            --brokers-count 1 \
+            --labels "for-test=true" \
+            --async
+          yc managed-kafka cluster get --name "$REPO-managed-kafka-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/managed-kafka.id
+
+      - name: Create Application Load Balancer
+        run: |
+          SUBNET=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0]')
+          SUBNET_ID=$(echo "$SUBNET" | jq -r '.id')
+          NETWORK_ID=$(echo "$SUBNET" | jq -r '.network_id')
+          yc alb load-balancer create \
+            --name "$REPO-alb-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --location "zone=$ZONE,subnet-id=$SUBNET_ID" \
+            --labels "for-test=true" \
+            --async
+          yc alb load-balancer get --name "$REPO-alb-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/application-load-balancer.id
+
+      - name: Create Redis cluster
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          yc managed-redis cluster create \
+            --name "$REPO-managed-redis-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --environment prestable \
+            --redis-version 8.0-valkey \
+            --resource-preset b3-c1-m4 \
+            --disk-type-id network-ssd \
+            --disk-size 16 \
+            --host zone-id="$ZONE",subnet-id="$SUBNET_ID" \
+            --password "E2eTestPass1!" \
+            --labels "for-test=true" \
+            --async
+          yc managed-redis cluster get --name "$REPO-managed-redis-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/managed-redis.id
+
+      - name: Create ClickHouse cluster
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          yc managed-clickhouse cluster create \
+            --name "$REPO-managed-clickhouse-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --environment prestable \
+            --clickhouse-resource-preset b3-c1-m4 \
+            --clickhouse-disk-type network-ssd \
+            --clickhouse-disk-size 10 \
+            --host zone-id="$ZONE",subnet-id="$SUBNET_ID",type=clickhouse \
+            --admin-password "E2eTestPass1!" \
+            --labels "for-test=true" \
+            --async
+          yc managed-clickhouse cluster get --name "$REPO-managed-clickhouse-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/managed-clickhouse.id
+
+      - name: Create MySQL cluster
+        run: |
+          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
+          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
+            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          yc managed-mysql cluster create \
+            --name "$REPO-managed-mysql-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --network-id "$NETWORK_ID" \
+            --environment prestable \
+            --mysql-version 8.0 \
+            --resource-preset b1.medium \
+            --disk-type network-ssd \
+            --disk-size 10 \
+            --host zone-id="$ZONE",subnet-id="$SUBNET_ID" \
+            --user name=e2e,password="E2eTestPass1!" \
+            --database name=e2e \
+            --labels "for-test=true" \
+            --async
+          yc managed-mysql cluster get --name "$REPO-managed-mysql-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/managed-mysql.id
+
+      # ------------------------------------------------------------------
+      # Phase 3: Wait RUNNING — all in parallel, fail-fast
+      # ------------------------------------------------------------------
+      - name: Wait for all resources RUNNING
+        run: |
+          source tests/e2e/yc.sh
+
+          wait_running compute-instance          "$(cat /tmp/e2e/compute-instance.id)"          30 10 &  P1=$!
+          wait_running managed-postgresql        "$(cat /tmp/e2e/managed-postgresql.id)"        60 15 &  P2=$!
+          wait_running managed-kubernetes        "$(cat /tmp/e2e/managed-kubernetes.id)"        90 15 &  P3=$!
+          wait_running network-load-balancer     "$(cat /tmp/e2e/network-load-balancer.id)"     30 10 &  P4=$!
+          wait_running managed-kafka             "$(cat /tmp/e2e/managed-kafka.id)"             60 15 &  P5=$!
+          wait_running application-load-balancer "$(cat /tmp/e2e/application-load-balancer.id)" 60 10 &  P6=$!
+          wait_running managed-redis             "$(cat /tmp/e2e/managed-redis.id)"             60 15 &  P7=$!
+          wait_running managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        60 15 &  P8=$!
+          wait_running managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             60 15 &  P9=$!
+
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+
+      # ------------------------------------------------------------------
+      # Phase 4: Wait Rundeck nodes — all in parallel
+      # ------------------------------------------------------------------
+      - name: Wait for all nodes in Rundeck
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/compute-instance.id)"          --timeout 180 &  P1=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-postgresql.id)"        --timeout 180 &  P2=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-kubernetes.id)"        --timeout 180 &  P3=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/network-load-balancer.id)"     --timeout 180 &  P4=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-kafka.id)"             --timeout 180 &  P5=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/application-load-balancer.id)" --timeout 180 &  P6=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-redis.id)"             --timeout 180 &  P7=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-clickhouse.id)"        --timeout 180 &  P8=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-mysql.id)"             --timeout 180 &  P9=$!
+
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+
+      # ------------------------------------------------------------------
+      # Phase 5+6: Backup — PG + MySQL only, trigger and wait in parallel
+      # ------------------------------------------------------------------
+      - name: Backup PG and MySQL (required before stop)
+        run: |
+          source tests/e2e/yc.sh
+
+          wait_backup managed-postgresql "$(cat /tmp/e2e/managed-postgresql.id)" &  P1=$!
+          wait_backup managed-mysql      "$(cat /tmp/e2e/managed-mysql.id)"      &  P2=$!
+
+          wait $P1 $P2
+
+      # ------------------------------------------------------------------
+      # Phase 7: Stop tests — all in parallel
+      # ------------------------------------------------------------------
+      - name: Run stop jobs
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/compute-instance          --name Stop --resource-id "$(cat /tmp/e2e/compute-instance.id)"          &  P1=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-postgresql        --name Stop --resource-id "$(cat /tmp/e2e/managed-postgresql.id)"        --timeout 600 &  P2=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-kubernetes        --name Stop --resource-id "$(cat /tmp/e2e/managed-kubernetes.id)"        --timeout 600 &  P3=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/network-load-balancer     --name Stop --resource-id "$(cat /tmp/e2e/network-load-balancer.id)"     &  P4=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-kafka             --name Stop --resource-id "$(cat /tmp/e2e/managed-kafka.id)"             --timeout 600 &  P5=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/application-load-balancer --name Stop --resource-id "$(cat /tmp/e2e/application-load-balancer.id)" &  P6=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-redis             --name Stop --resource-id "$(cat /tmp/e2e/managed-redis.id)"             --timeout 600 &  P7=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-clickhouse        --name Stop --resource-id "$(cat /tmp/e2e/managed-clickhouse.id)"        --timeout 600 &  P8=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-mysql             --name Stop --resource-id "$(cat /tmp/e2e/managed-mysql.id)"             --timeout 600 &  P9=$!
+
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+
+      # ------------------------------------------------------------------
+      # Phase 8: Verify STOPPED — all in parallel
+      # ------------------------------------------------------------------
+      - name: Verify all resources STOPPED
+        run: |
+          source tests/e2e/yc.sh
+
+          verify_status compute-instance          "$(cat /tmp/e2e/compute-instance.id)"          STOPPED &  P1=$!
+          verify_status managed-postgresql        "$(cat /tmp/e2e/managed-postgresql.id)"        STOPPED &  P2=$!
+          verify_status managed-kubernetes        "$(cat /tmp/e2e/managed-kubernetes.id)"        STOPPED 40 15 &  P3=$!
+          verify_status network-load-balancer     "$(cat /tmp/e2e/network-load-balancer.id)"     STOPPED &  P4=$!
+          verify_status managed-kafka             "$(cat /tmp/e2e/managed-kafka.id)"             STOPPED &  P5=$!
+          verify_status application-load-balancer "$(cat /tmp/e2e/application-load-balancer.id)" STOPPED &  P6=$!
+          verify_status managed-redis             "$(cat /tmp/e2e/managed-redis.id)"             STOPPED &  P7=$!
+          verify_status managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        STOPPED &  P8=$!
+          verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             STOPPED &  P9=$!
+
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+
+      # ------------------------------------------------------------------
+      # Phase 9: Start tests — all in parallel
+      # ------------------------------------------------------------------
+      - name: Run start jobs
+        env:
+          RUNDECK_TOKEN: ${{ steps.setup.outputs.rundeck_token }}
+        run: |
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/compute-instance          --name Start --resource-id "$(cat /tmp/e2e/compute-instance.id)"          &  P1=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-postgresql        --name Start --resource-id "$(cat /tmp/e2e/managed-postgresql.id)"        --timeout 600 &  P2=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-kubernetes        --name Start --resource-id "$(cat /tmp/e2e/managed-kubernetes.id)"        --timeout 900 &  P3=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/network-load-balancer     --name Start --resource-id "$(cat /tmp/e2e/network-load-balancer.id)"     &  P4=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-kafka             --name Start --resource-id "$(cat /tmp/e2e/managed-kafka.id)"             --timeout 600 &  P5=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/application-load-balancer --name Start --resource-id "$(cat /tmp/e2e/application-load-balancer.id)" &  P6=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-redis             --name Start --resource-id "$(cat /tmp/e2e/managed-redis.id)"             --timeout 600 &  P7=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-clickhouse        --name Start --resource-id "$(cat /tmp/e2e/managed-clickhouse.id)"        --timeout 600 &  P8=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-mysql             --name Start --resource-id "$(cat /tmp/e2e/managed-mysql.id)"             --timeout 600 &  P9=$!
+
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+
+      # ------------------------------------------------------------------
+      # Phase 10: Verify RUNNING — all in parallel
+      # ------------------------------------------------------------------
+      - name: Verify all resources RUNNING
+        run: |
+          source tests/e2e/yc.sh
+
+          verify_status compute-instance          "$(cat /tmp/e2e/compute-instance.id)"          RUNNING 12 10 &  P1=$!
+          verify_status managed-postgresql        "$(cat /tmp/e2e/managed-postgresql.id)"        RUNNING 40 15 &  P2=$!
+          verify_status managed-kubernetes        "$(cat /tmp/e2e/managed-kubernetes.id)"        RUNNING 60 15 &  P3=$!
+          verify_status network-load-balancer     "$(cat /tmp/e2e/network-load-balancer.id)"     ACTIVE  12 10 &  P4=$!
+          verify_status managed-kafka             "$(cat /tmp/e2e/managed-kafka.id)"             RUNNING 40 15 &  P5=$!
+          verify_status application-load-balancer "$(cat /tmp/e2e/application-load-balancer.id)" ACTIVE  18 10 &  P6=$!
+          verify_status managed-redis             "$(cat /tmp/e2e/managed-redis.id)"             RUNNING 40 15 &  P7=$!
+          verify_status managed-clickhouse        "$(cat /tmp/e2e/managed-clickhouse.id)"        RUNNING 40 15 &  P8=$!
+          verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             RUNNING 40 15 &  P9=$!
+
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9
+
+      # ------------------------------------------------------------------
+      # Phase 11: Cleanup — always, delete all resources in parallel
+      # ------------------------------------------------------------------
+      - name: Cleanup - delete all resources
+        if: always()
+        run: |
+          [ -f /tmp/e2e/compute-instance.id ]          && yc compute instance delete                   --id "$(cat /tmp/e2e/compute-instance.id)"          --async || true &
+          [ -f /tmp/e2e/managed-postgresql.id ]        && yc managed-postgresql cluster delete          --id "$(cat /tmp/e2e/managed-postgresql.id)"        --async || true &
+          [ -f /tmp/e2e/managed-kubernetes.id ]        && yc managed-kubernetes cluster delete          --id "$(cat /tmp/e2e/managed-kubernetes.id)"        --async || true &
+          [ -f /tmp/e2e/network-load-balancer.id ]     && yc load-balancer network-load-balancer delete --id "$(cat /tmp/e2e/network-load-balancer.id)"     || true &
+          [ -f /tmp/e2e/nlb-tg.id ]                   && yc load-balancer target-group delete          --id "$(cat /tmp/e2e/nlb-tg.id)"                   || true &
+          [ -f /tmp/e2e/nlb-vm.id ]                   && yc compute instance delete                    --id "$(cat /tmp/e2e/nlb-vm.id)"                   --async || true &
+          [ -f /tmp/e2e/managed-kafka.id ]             && yc managed-kafka cluster delete               --id "$(cat /tmp/e2e/managed-kafka.id)"             --async || true &
+          [ -f /tmp/e2e/application-load-balancer.id ] && yc alb load-balancer delete                  --id "$(cat /tmp/e2e/application-load-balancer.id)" --async || true &
+          [ -f /tmp/e2e/managed-redis.id ]             && yc managed-redis cluster delete               --id "$(cat /tmp/e2e/managed-redis.id)"             --async || true &
+          [ -f /tmp/e2e/managed-clickhouse.id ]        && yc managed-clickhouse cluster delete          --id "$(cat /tmp/e2e/managed-clickhouse.id)"        --async || true &
+          [ -f /tmp/e2e/managed-mysql.id ]             && yc managed-mysql cluster delete               --id "$(cat /tmp/e2e/managed-mysql.id)"             --async || true &
+          wait
+
+      - name: Cleanup - stop Rundeck
+        if: always()
+        run: docker rm -f rundeck || true
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## E2E All Resources" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Resource | ID |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| image_tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql; do
+            ID=$(cat "/tmp/e2e/$type.id" 2>/dev/null || echo "n/a")
+            echo "| $type | \`$ID\` |" >> "$GITHUB_STEP_SUMMARY"
+          done
