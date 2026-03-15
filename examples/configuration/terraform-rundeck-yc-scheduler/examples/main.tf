@@ -15,10 +15,10 @@ module "rundeck_projects" {
 
   projects = [
     {
-      name         = "production"
-      display_name = "Production Environment"
+      name         = "staging"
+      display_name = "Staging Environment"
       folder_id    = "b1g0abc123def456"
-      yc_sa_key    = var.yc_sa_key_production
+      yc_sa_key    = var.yc_sa_key_staging
 
       # Quartz cron: sec min hour day month weekday [year]
       stop_schedule  = "0 0 21 ? * MON-FRI *"
@@ -41,10 +41,10 @@ module "rundeck_projects" {
       }
     },
     {
-      name         = "staging"
-      display_name = "Staging Environment"
+      name         = "dev"
+      display_name = "Dev Environment"
       folder_id    = "b1g0xyz789ghi012"
-      yc_sa_key    = var.yc_sa_key_staging
+      yc_sa_key    = var.yc_sa_key_dev
 
       stop_schedule  = "0 0 19 ? * MON-FRI *"
       start_schedule = "0 0 9 ? * MON-FRI *"

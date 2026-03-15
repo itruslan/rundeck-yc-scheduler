@@ -26,12 +26,7 @@ Optional settings:
 
 ### Supported Resource Types
 
-| Type | Description |
-| --- | --- |
-| `compute-instance` | Virtual machines |
-| `managed-postgresql` | Managed PostgreSQL clusters |
-| `managed-kubernetes` | Managed Kubernetes clusters |
-| `network-load-balancer` | Network load balancers |
+Check in [README.md](../../../README.md)
 
 ### Resource Type Options
 
@@ -39,7 +34,7 @@ Each resource type accepts optional parameters:
 
 | Parameter | Description | Default |
 | --- | --- | --- |
-| `enabled` | Enable/disable this resource type | `true` |
+| `enabled` | Enable/disable this resource type | `false` |
 | `stop_order` | Execution order (lower = earlier) | `1` |
 | `stop_schedule_override` | Override project-level stop schedule | `null` |
 | `start_schedule_override` | Override project-level start schedule | `null` |
@@ -77,8 +72,8 @@ module "rundeck_projects" {
       time_zone      = "Europe/Moscow"
 
       resource_types = {
-        "compute-instance"   = { stop_order = 2 }
-        "managed-postgresql" = { stop_order = 1 }
+        "compute-instance"   = { enabled = true, stop_order = 2 }
+        "managed-postgresql" = { enabled = true, stop_order = 1 }
       }
     },
     {
@@ -87,7 +82,7 @@ module "rundeck_projects" {
       yc_sa_key = var.yc_sa_key_staging
 
       resource_types = {
-        "compute-instance" = {}
+        "compute-instance" = { enabled = true }
       }
     },
   ]

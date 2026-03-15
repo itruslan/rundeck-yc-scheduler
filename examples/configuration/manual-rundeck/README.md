@@ -94,15 +94,7 @@ Templates `stop-RESOURCE_TYPE.yaml.tpl` and `start-RESOURCE_TYPE.yaml.tpl` let y
 
 **Supported resource types:**
 
-- `compute-instance`
-- `managed-postgresql`
-- `managed-kubernetes`
-- `network-load-balancer`
-- `managed-kafka`
-- `application-load-balancer`
-- `managed-redis`
-- `managed-clickhouse`
-- `managed-mysql`
+Check in [README.md](../../../README.md)
 
 **Generate jobs for one type:**
 
