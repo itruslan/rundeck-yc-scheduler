@@ -69,10 +69,30 @@ variable "projects" {
     start_schedule = optional(string)
     time_zone      = optional(string, "Europe/Moscow")
     resource_types = optional(map(object({
-      enabled                 = optional(bool, true)
+      enabled                 = optional(bool, false)
       stop_schedule_override  = optional(string)
       start_schedule_override = optional(string)
       stop_order              = optional(number, 1)
-    })), { "compute-instance" = {} })
+    })), {})
   }))
+
+  validation {
+    condition = alltrue([
+      for project in var.projects : alltrue([
+        for rt_name in keys(project.resource_types) :
+        contains([
+          "compute-instance",
+          "managed-postgresql",
+          "managed-kubernetes",
+          "network-load-balancer",
+          "managed-kafka",
+          "application-load-balancer",
+          "managed-redis",
+          "managed-clickhouse",
+          "managed-mysql",
+        ], rt_name)
+      ])
+    ])
+    error_message = "Unknown resource type in resource_types. Supported: compute-instance, managed-postgresql, managed-kubernetes, network-load-balancer, managed-kafka, application-load-balancer, managed-redis, managed-clickhouse, managed-mysql."
+  }
 }

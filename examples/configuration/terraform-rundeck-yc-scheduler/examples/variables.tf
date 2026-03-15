@@ -10,15 +10,15 @@ variable "rundeck_auth_token" {
   sensitive   = true
 }
 
-variable "yc_sa_key_production" {
-  description = "Base64-encoded Yandex Cloud Service Account key for production folder"
+variable "yc_sa_key_staging" {
+  description = "Base64-encoded Yandex Cloud Service Account key for staging folder"
   type        = string
   sensitive   = true
   default     = ""
 }
 
-variable "yc_sa_key_staging" {
-  description = "Base64-encoded Yandex Cloud Service Account key for staging folder"
+variable "yc_sa_key_dev" {
+  description = "Base64-encoded Yandex Cloud Service Account key for dev folder"
   type        = string
   sensitive   = true
   default     = ""

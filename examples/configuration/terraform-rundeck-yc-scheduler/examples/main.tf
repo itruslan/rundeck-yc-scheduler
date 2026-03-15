@@ -51,7 +51,7 @@ module "rundeck_projects" {
       time_zone      = "Europe/Moscow"
 
       resource_types = {
-        "compute-instance" = {}
+        "compute-instance" = { enabled = true }
       }
     },
   ]
