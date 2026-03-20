@@ -54,9 +54,9 @@ jobs:
             --network-id "$NETWORK_ID" \
             --environment prestable \
             --mongodb-version 6.0 \
-            --resource-preset b3-c1-m4 \
-            --disk-type-id network-ssd \
-            --disk-size 10 \
+            --mongod-resource-preset b3-c1-m4 \
+            --mongod-disk-type network-ssd \
+            --mongod-disk-size 10 \
             --host zone-id="$ZONE",subnet-id="$SUBNET_ID",type=mongod \
             --user name=e2e,password="E2eTestPass1!" \
             --database name=e2e \
