@@ -53,7 +53,7 @@ jobs:
             --folder-id "$FOLDER_ID" \
             --network-id "$NETWORK_ID" \
             --environment prestable \
-            --mongodb-version 6.0 \
+            --mongodb-version 8.0 \
             --mongod-resource-preset b3-c1-m4 \
             --mongod-disk-type network-ssd \
             --mongod-disk-size 10 \
