@@ -79,6 +79,12 @@ MYSQL_STOPPING = 5
 MYSQL_STOPPED = 6
 MYSQL_STARTING = 7
 
+# Managed MongoDB cluster (Cluster.Status)
+MONGODB_RUNNING = 2
+MONGODB_STOPPING = 5
+MONGODB_STOPPED = 6
+MONGODB_STARTING = 7
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.

@@ -50,8 +50,8 @@ All operations are idempotent — resources already in the target state are skip
 | `managed-redis` | ✅ done | 0.4.0 |
 | `managed-clickhouse` | ✅ done | 0.5.0 |
 | `managed-mysql` | ✅ done | 0.6.0 |
+| `managed-mongodb` | ✅ done | 0.7.0 |
 | `managed-opensearch` | 🔜 planned | — |
-| `managed-mongodb` | 🔜 planned | — |
 | `ydb` | 🔜 planned | — |
 
 ## Quick start
