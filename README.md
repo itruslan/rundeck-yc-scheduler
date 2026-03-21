@@ -49,6 +49,13 @@ All operations are idempotent — resources already in the target state are skip
 
 ## Plugin configuration
 
+### yc-node-source
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `folder_id` | Yandex Cloud folder ID to list resources from | — (required) |
+| `yc_sa_key` | Path to the base64-encoded service account JSON key in Key Storage | — (required) |
+
 ### yc-stop / yc-start
 
 | Parameter | Description | Default |
