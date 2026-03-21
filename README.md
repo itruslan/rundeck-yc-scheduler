@@ -37,22 +37,41 @@ Resources in a YC folder are discovered via `yc-node-source` and exposed as Rund
 
 All operations are idempotent — resources already in the target state are skipped. Each job executes per node, with optional parallelism configured at the job level. Label-based node filters let you exclude specific resources from a job without changing infrastructure (e.g. tag a resource `no_shutdown: "true"` and filter it out).
 
+## Features
+
+- **12 supported resource types** — compute instances, managed databases (PostgreSQL, MySQL, MongoDB, ClickHouse, Redis, Kafka, OpenSearch), Kubernetes clusters, load balancers (NLB, ALB), YDB
+- **Idempotent operations** — resources already in the target state are silently skipped
+- **Label-based exclusions** — exclude individual resources from jobs via YC labels without touching infrastructure
+- **Execution ordering** — control stop/start order across resource types via `stop_order`
+- **Configurable operation timeout** — set per job how long to wait for a YC operation to complete (default: 300 s; recommended 900 s for Kubernetes and YDB)
+- **Terraform module** — manage all projects and schedules as code
+- **Docker image** — Rundeck with the plugin pre-installed, ready to run
+
+## Plugin configuration
+
+### yc-stop / yc-start
+
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `yc_sa_key` | Path to the base64-encoded service account JSON key in Key Storage | — (required) |
+| `operation_timeout` | Maximum seconds to wait for a YC operation to complete | `300` |
+
+`operation_timeout` is set per job step — in the Rundeck UI (edit workflow → step settings) or via the Terraform module's `operation_timeout` field in `resource_types`.
+
 ## Supported resource types
 
-| Type | Status | Since |
-| --- | --- | --- |
-| `compute-instance` | ✅ done | 0.1.0 |
-| `managed-postgresql` | ✅ done | 0.1.0 |
-| `managed-kubernetes` | ✅ done | 0.1.0 |
-| `network-load-balancer` | ✅ done | 0.1.0 |
-| `managed-kafka` | ✅ done | 0.2.0 |
-| `application-load-balancer` | ✅ done | 0.3.0 |
-| `managed-redis` | ✅ done | 0.4.0 |
-| `managed-clickhouse` | ✅ done | 0.5.0 |
-| `managed-mysql` | ✅ done | 0.6.0 |
-| `managed-mongodb` | ✅ done | 0.7.0 |
-| `managed-opensearch` | ✅ done | 0.8.0 |
-| `ydb` | ✅ done | 0.9.0 |
+- `compute-instance`
+- `managed-postgresql`
+- `managed-kubernetes`
+- `network-load-balancer`
+- `managed-kafka`
+- `application-load-balancer`
+- `managed-redis`
+- `managed-clickhouse`
+- `managed-mysql`
+- `managed-mongodb`
+- `managed-opensearch`
+- `ydb`
 
 ## Quick start
 
@@ -76,9 +95,7 @@ See [Docker deployment guide](examples/deployment/docker/) or [Ansible role](exa
 ## Ideas & future work
 
 - **OIDC authentication example** — add a ready-to-use configuration example for SSO via Keycloak, Authentik, or Okta
-- **More resource types** — see planned entries in the table above
 - **Dry-run mode** — log what would be stopped/started without actually calling the API, useful for auditing schedules
-- **Configurable operation timeout** — expose `operation_timeout` as a Rundeck job option so users can tune wait time per job without rebuilding the image
 - **Kubernetes deployment example** — add `examples/deployment/kubernetes/` with Deployment, Service, ConfigMap, Secret, and PVC manifests alongside the existing Docker and Ansible examples
 
 ## Development

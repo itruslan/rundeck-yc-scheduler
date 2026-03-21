@@ -1,148 +1,130 @@
-# Rundeck YC Scheduler — Terraform Module
+# Terraform Module: rundeck-yc-scheduler
 
-Terraform module for managing Rundeck projects with scheduled start/stop jobs for Yandex Cloud resources.
+Manages Rundeck projects and scheduled stop/start jobs for Yandex Cloud resources.
 
-## Features
+## What it creates
 
-- Creates Rundeck projects with [yc-node-source](../../../plugin/) plugin pre-configured
-- Uploads SA keys to Rundeck Key Storage and creates ACL policies automatically
-- Generates stop/start jobs for all resource types at once and per resource type
-- Supports per-type schedule overrides and execution ordering
-- Excludes resources by label (e.g., `no_autoshutdown: true`)
+For each project in `var.projects`:
 
-## Project Definition
-
-Each project maps to one Yandex Cloud folder and requires:
-
-- **name** — Rundeck project name (must be unique)
-- **folder_id** — Yandex Cloud folder ID containing the resources
-- **yc_sa_key** — base64-encoded Service Account authorized key (stored in Rundeck Key Storage)
-
-Optional settings:
-
-- **stop_schedule** / **start_schedule** — Quartz cron expressions (e.g., `0 0 21 ? * MON-FRI *`)
-- **time_zone** — schedule time zone (default: `Europe/Moscow`)
-- **resource_types** — map of resource types to manage (default: `compute-instance` only)
-
-### Supported Resource Types
-
-Check in [README.md](../../../README.md)
-
-### Resource Type Options
-
-Each resource type accepts optional parameters:
-
-| Parameter | Description | Default |
-| --- | --- | --- |
-| `enabled` | Enable/disable this resource type | `false` |
-| `stop_order` | Execution order (lower = earlier) | `1` |
-| `stop_schedule_override` | Override project-level stop schedule | `null` |
-| `start_schedule_override` | Override project-level start schedule | `null` |
-
-### Schedule Format
-
-Schedules use [Quartz cron expressions](http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html):
-
-```text
-sec min hour day month weekday [year]
-```
-
-Examples:
-
-- `0 0 21 ? * MON-FRI *` — 21:00 on weekdays
-- `0 30 7 ? * MON-FRI *` — 07:30 on weekdays
-- `0 0 18 ? * * *` — 18:00 every day
+- **Rundeck project** pointed at a YC folder
+- **SA key** uploaded to Key Storage at `keys/project/<name>/yc-sa-key`
+- **ACL policy** so the node source plugin can read the key
+- **Stop / Start jobs** — one pair per enabled resource type, plus a manual "Stop All / Start All" pair
 
 ## Usage
 
 ```hcl
-module "rundeck_projects" {
-  source = "git::https://github.com/<owner>/rundeck-yc-scheduler.git//examples/configuration/terraform-rundeck-yc-scheduler?ref=v1.0.0"
+module "rundeck" {
+  source = "git::https://github.com/itruslan/rundeck-yc-scheduler.git//examples/configuration/terraform-rundeck-yc-scheduler?ref=v1.0.0"
 
   rundeck_url        = "http://localhost:4440"
   rundeck_auth_token = var.rundeck_auth_token
 
   projects = [
     {
-      name           = "production"
-      folder_id      = "b1g0abc123def456"
-      yc_sa_key      = var.yc_sa_key_production
+      name      = "staging"
+      folder_id = "b1g0abc123def456"
+      yc_sa_key = var.yc_sa_key_staging
+
       stop_schedule  = "0 0 21 ? * MON-FRI *"
       start_schedule = "0 0 7 ? * MON-FRI *"
       time_zone      = "Europe/Moscow"
 
       resource_types = {
-        "compute-instance"   = { enabled = true, stop_order = 2 }
-        "managed-postgresql" = { enabled = true, stop_order = 1 }
-      }
-    },
-    {
-      name      = "staging"
-      folder_id = "b1g0xyz789ghi012"
-      yc_sa_key = var.yc_sa_key_staging
-
-      resource_types = {
-        "compute-instance" = { enabled = true }
+        "compute-instance" = {
+          enabled    = true
+          stop_order = 2
+        }
+        "managed-postgresql" = {
+          enabled    = true
+          stop_order = 1
+        }
+        "managed-kubernetes" = {
+          enabled           = true
+          stop_order        = 3
+          operation_timeout = 900
+        }
       }
     },
   ]
 }
 ```
 
-## Configure Access
+## Project parameters
 
-```bash
-export RUNDECK_URL="http://localhost:4440"
-export RUNDECK_AUTH_TOKEN="your-api-token"
-```
+| Parameter | Description | Required | Default |
+| --- | --- | :---: | --- |
+| `name` | Rundeck project name | ✅ | — |
+| `folder_id` | Yandex Cloud folder ID | ✅ | — |
+| `yc_sa_key` | Base64-encoded SA authorized key | | — |
+| `display_name` | Project label shown in Rundeck UI | | same as `name` |
+| `stop_schedule` | Quartz cron for stop jobs (see format below) | | no schedule |
+| `start_schedule` | Quartz cron for start jobs | | no schedule |
+| `time_zone` | Schedule time zone | | `Europe/Moscow` |
+| `resource_types` | Map of resource types to manage (see below) | | `{}` |
 
-Generate an API token: **Rundeck UI → User Profile → API Tokens → Generate New Token**.
+## Resource type parameters
 
-<!-- BEGIN_TF_DOCS -->
-## Requirements
+Each key in `resource_types` is a resource type string (e.g. `"compute-instance"`).
 
-| Name | Version |
-|------|---------|
-| <a name="requirement_rundeck"></a> [rundeck](#requirement\_rundeck) | ~> 1.1 |
+| Parameter | Description | Default |
+| --- | --- | --- |
+| `enabled` | Include this type in stop/start jobs | `false` |
+| `stop_order` | Execution order across types — lower runs first | `1` |
+| `operation_timeout` | Seconds to wait for a YC operation to complete | `300` |
+| `stop_schedule_override` | Override the project-level stop schedule for this type | — |
+| `start_schedule_override` | Override the project-level start schedule for this type | — |
 
-## Providers
+### Supported resource types
 
-| Name | Version |
-|------|---------|
-| <a name="provider_rundeck"></a> [rundeck](#provider\_rundeck) | ~> 1.1 |
+`compute-instance`, `managed-postgresql`, `managed-kubernetes`, `network-load-balancer`,
+`managed-kafka`, `application-load-balancer`, `managed-redis`, `managed-clickhouse`,
+`managed-mysql`, `managed-mongodb`, `managed-opensearch`, `ydb`
 
-## Modules
+> **Tip:** `managed-kubernetes` and `ydb` clusters take longer than the default 300 s.
+> Set `operation_timeout = 900` for them.
 
-No modules.
+## Schedule format
 
-## Resources
+Schedules use [Quartz cron](http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html): `sec min hour day month weekday [year]`
 
-| Name | Type |
-|------|------|
-| [rundeck_acl_policy.project_storage](https://registry.terraform.io/providers/rundeck/rundeck/latest/docs/resources/acl_policy) | resource |
-| [rundeck_job.this](https://registry.terraform.io/providers/rundeck/rundeck/latest/docs/resources/job) | resource |
-| [rundeck_password.yc_sa_key](https://registry.terraform.io/providers/rundeck/rundeck/latest/docs/resources/password) | resource |
-| [rundeck_project.this](https://registry.terraform.io/providers/rundeck/rundeck/latest/docs/resources/project) | resource |
+| Example | Meaning |
+| --- | --- |
+| `0 0 21 ? * MON-FRI *` | 21:00 on weekdays |
+| `0 0 7 ? * MON-FRI *` | 07:00 on weekdays |
+| `0 0 18 ? * * *` | 18:00 every day |
 
-## Inputs
+## Module variables
 
-| Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
-| <a name="input_projects"></a> [projects](#input\_projects) | List of Rundeck projects (one per YC folder) | <pre>list(object({<br>    name           = string<br>    display_name   = optional(string)<br>    folder_id      = string<br>    yc_sa_key      = optional(string)<br>    stop_schedule  = optional(string)<br>    start_schedule = optional(string)<br>    time_zone      = optional(string, "Europe/Moscow")<br>    resource_types = optional(map(object({<br>      enabled                 = optional(bool, false)<br>      stop_schedule_override  = optional(string)<br>      start_schedule_override = optional(string)<br>      stop_order              = optional(number, 1)<br>    })), {})<br>  }))</pre> | n/a | yes |
-| <a name="input_rundeck_auth_token"></a> [rundeck\_auth\_token](#input\_rundeck\_auth\_token) | Rundeck API token (User Profile → API Tokens) | `string` | n/a | yes |
-| <a name="input_command_ordering_strategy"></a> [command\_ordering\_strategy](#input\_command\_ordering\_strategy) | Execution strategy: node-first (all steps on one node, then next) or step-first | `string` | `"node-first"` | no |
-| <a name="input_continue_next_node_on_error"></a> [continue\_next\_node\_on\_error](#input\_continue\_next\_node\_on\_error) | Continue processing remaining nodes if one node fails | `bool` | `true` | no |
-| <a name="input_log_level"></a> [log\_level](#input\_log\_level) | Job log level: DEBUG, VERBOSE, INFO, WARN, ERROR | `string` | `"INFO"` | no |
-| <a name="input_max_thread_count"></a> [max\_thread\_count](#input\_max\_thread\_count) | Maximum number of nodes processed in parallel per job | `number` | `10` | no |
-| <a name="input_node_filter_exclude_query"></a> [node\_filter\_exclude\_query](#input\_node\_filter\_exclude\_query) | Node filter expression to exclude nodes from all jobs (e.g., "labels:no\_autoshutdown: true") | `string` | `""` | no |
-| <a name="input_nodes_selected_by_default"></a> [nodes\_selected\_by\_default](#input\_nodes\_selected\_by\_default) | Whether all matched nodes are selected by default when running a job manually | `bool` | `true` | no |
-| <a name="input_rank_attribute"></a> [rank\_attribute](#input\_rank\_attribute) | Node attribute used to sort execution order within a job | `string` | `"stop_order"` | no |
-| <a name="input_rank_order"></a> [rank\_order](#input\_rank\_order) | Sort direction for rank\_attribute: ascending or descending | `string` | `"ascending"` | no |
-| <a name="input_rundeck_url"></a> [rundeck\_url](#input\_rundeck\_url) | Rundeck URL | `string` | `"http://localhost:4440"` | no |
+| Name | Description | Default |
+| --- | --- | --- |
+| `rundeck_url` | Rundeck server URL | `http://localhost:4440` |
+| `rundeck_auth_token` | API token — generate via **User Profile → API Tokens** | — |
+| `log_level` | Job log level: `DEBUG`, `VERBOSE`, `INFO`, `WARN`, `ERROR` | `INFO` |
+| `max_thread_count` | Nodes processed in parallel per job | `10` |
+| `continue_next_node_on_error` | Continue to next node if one fails | `true` |
+| `nodes_selected_by_default` | Pre-select all matched nodes when running manually | `true` |
+| `node_filter_exclude_query` | Global node filter exclusion (e.g. `labels:no_autoshutdown: true`) | `""` |
+| `rank_attribute` | Node attribute used to order execution | `stop_order` |
+| `rank_order` | Sort direction for `rank_attribute` | `ascending` |
+| `command_ordering_strategy` | `node-first` or `step-first` | `node-first` |
 
 ## Outputs
 
 | Name | Description |
-|------|-------------|
-| <a name="output_project_ui_urls"></a> [project\_ui\_urls](#output\_project\_ui\_urls) | Rundeck project UI URLs |
-<!-- END_TF_DOCS -->
+| --- | --- |
+| `project_ui_urls` | Map of project name → Rundeck jobs URL |
+
+## Get the SA key
+
+```bash
+# Create a service account and generate a key
+yc iam service-account create --name rundeck-scheduler
+yc iam key create --service-account-name rundeck-scheduler --output sa-key.json
+
+# Encode it
+base64 -i sa-key.json | tr -d '\n'
+```
+
+The SA must have the following roles in the YC folder:
+`compute.admin`, `mdb.admin`, `alb.admin`, `load-balancer.admin`, `k8s.admin`

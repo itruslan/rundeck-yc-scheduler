@@ -6,5 +6,5 @@
 rundeck_url        = "http://localhost:4440"
 rundeck_auth_token = "your-api-token-here"
 
-yc_sa_key_staging    = "base64-encoded-sa-key"
-yc_sa_key_dev = "base64-encoded-sa-key"
+yc_sa_key_staging = "base64-encoded-sa-key"
+yc_sa_key_dev     = "base64-encoded-sa-key"

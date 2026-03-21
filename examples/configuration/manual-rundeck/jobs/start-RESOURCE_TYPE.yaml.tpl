@@ -41,5 +41,6 @@
         type: yc-start
         configuration:
           yc_sa_key: keys/project/${job.project}/yc-sa-key
+          operation_timeout: "300"
     keepgoing: false
     strategy: node-first

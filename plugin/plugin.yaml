@@ -35,7 +35,7 @@ providers:
     plugin-type: script
     script-interpreter: python3
     script-file: start.py
-    script-args: "--type ${node.resource_type} --id ${node.resource_id}"
+    script-args: "--type ${node.resource_type} --id ${node.resource_id} --timeout ${config.operation_timeout}"
     config:
       - type: String
         name: yc_sa_key
@@ -46,6 +46,12 @@ providers:
           selectionAccessor: STORAGE_PATH
           storage-path-root: "keys"
           valueConversion: "STORAGE_PATH_AUTOMATIC_READ"
+      - type: Integer
+        name: operation_timeout
+        title: Operation Timeout (seconds)
+        description: Maximum seconds to wait for a YC operation to complete. Default is 300.
+        required: false
+        default: "300"
 
   - name: yc-stop
     title: Yandex Cloud Stop Resource
@@ -53,7 +59,7 @@ providers:
     plugin-type: script
     script-interpreter: python3
     script-file: stop.py
-    script-args: "--type ${node.resource_type} --id ${node.resource_id}"
+    script-args: "--type ${node.resource_type} --id ${node.resource_id} --timeout ${config.operation_timeout}"
     config:
       - type: String
         name: yc_sa_key
@@ -64,3 +70,9 @@ providers:
           selectionAccessor: STORAGE_PATH
           storage-path-root: "keys"
           valueConversion: "STORAGE_PATH_AUTOMATIC_READ"
+      - type: Integer
+        name: operation_timeout
+        title: Operation Timeout (seconds)
+        description: Maximum seconds to wait for a YC operation to complete. Default is 300.
+        required: false
+        default: "300"
