@@ -27,6 +27,10 @@ on:
         description: managed-kubernetes
         type: boolean
         default: false
+      managed_mongodb:
+        description: managed-mongodb
+        type: boolean
+        default: false
       managed_mysql:
         description: managed-mysql
         type: boolean
@@ -76,6 +80,13 @@ jobs:
   managed-kubernetes:
     if: ${{ inputs.managed_kubernetes }}
     uses: ./.github/workflows/e2e-managed-kubernetes.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
+  managed-mongodb:
+    if: ${{ inputs.managed_mongodb }}
+    uses: ./.github/workflows/e2e-managed-mongodb.yml
     with:
       image_tag: ${{ inputs.image_tag }}
     secrets: inherit

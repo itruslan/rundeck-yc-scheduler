@@ -143,6 +143,15 @@ class TestMysqlClusterToNode:
         assert node["status"] == "RUNNING"
 
 
+class TestMongodbClusterToNode:
+    def test_output(self):
+        cluster = _make_resource(name="mongodb-prod", id="mongodb-1", status=2)
+        node = node_source.mongodb_cluster_to_node(cluster, "folder-1")
+
+        assert node["resource_type"] == "managed-mongodb"
+        assert node["status"] == "RUNNING"
+
+
 class TestK8sNodeFilter:
     """K8S worker nodes (auto-named) must be excluded from the node list."""
 
@@ -170,6 +179,7 @@ class TestK8sNodeFilter:
         mocker.patch("node_source.list_alb", return_value=[])
         mocker.patch("node_source.list_redis_clusters", return_value=[])
         mocker.patch("node_source.list_mysql_clusters", return_value=[])
+        mocker.patch("node_source.list_mongodb_clusters", return_value=[])
 
         node_source.main()
 

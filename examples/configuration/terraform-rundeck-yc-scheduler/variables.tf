@@ -90,9 +90,10 @@ variable "projects" {
           "managed-redis",
           "managed-clickhouse",
           "managed-mysql",
+          "managed-mongodb",
         ], rt_name)
       ])
     ])
-    error_message = "Unknown resource type in resource_types. Supported: compute-instance, managed-postgresql, managed-kubernetes, network-load-balancer, managed-kafka, application-load-balancer, managed-redis, managed-clickhouse, managed-mysql."
+    error_message = "Unknown resource type in resource_types. Supported: compute-instance, managed-postgresql, managed-kubernetes, network-load-balancer, managed-kafka, application-load-balancer, managed-redis, managed-clickhouse, managed-mysql, managed-mongodb."
   }
 }
