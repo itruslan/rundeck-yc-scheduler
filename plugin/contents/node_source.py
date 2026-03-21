@@ -41,6 +41,10 @@ from yandex.cloud.mdb.mongodb.v1 import cluster_service_pb2 as mongodb_cluster_s
 from yandex.cloud.mdb.mongodb.v1 import cluster_service_pb2_grpc as mongodb_cluster_service_pb2_grpc
 from yandex.cloud.mdb.mysql.v1 import cluster_service_pb2 as mysql_cluster_service_pb2
 from yandex.cloud.mdb.mysql.v1 import cluster_service_pb2_grpc as mysql_cluster_service_pb2_grpc
+from yandex.cloud.mdb.opensearch.v1 import cluster_service_pb2 as opensearch_cluster_service_pb2
+from yandex.cloud.mdb.opensearch.v1 import (
+    cluster_service_pb2_grpc as opensearch_cluster_service_pb2_grpc,
+)
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
@@ -156,6 +160,17 @@ _MYSQL_STATUSES = {
 }
 
 _MONGODB_STATUSES = {
+    0: "STATUS_UNKNOWN",
+    1: "CREATING",
+    2: "RUNNING",
+    3: "ERROR",
+    4: "UPDATING",
+    5: "STOPPING",
+    6: "STOPPED",
+    7: "STARTING",
+}
+
+_OPENSEARCH_STATUSES = {
     0: "STATUS_UNKNOWN",
     1: "CREATING",
     2: "RUNNING",
@@ -342,6 +357,18 @@ def mongodb_cluster_to_node(cluster: Any, folder_id: str) -> dict:
     return _to_node(cluster, "managed-mongodb", cluster.status, _MONGODB_STATUSES, folder_id)
 
 
+def list_opensearch_clusters(sdk: yandexcloud.SDK, folder_id: str) -> list:
+    svc = sdk.client(opensearch_cluster_service_pb2_grpc.ClusterServiceStub)
+    return _paginate(
+        svc.List, opensearch_cluster_service_pb2.ListClustersRequest, "clusters", folder_id
+    )
+
+
+def opensearch_cluster_to_node(cluster: Any, folder_id: str) -> dict:
+    """Convert a YC managed-opensearch cluster to Rundeck node format."""
+    return _to_node(cluster, "managed-opensearch", cluster.status, _OPENSEARCH_STATUSES, folder_id)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -423,6 +450,12 @@ def main() -> None:
             nodes[cluster.name] = mongodb_cluster_to_node(cluster, folder_id)
     except Exception as e:
         print(f"WARNING: failed to list managed-mongodb clusters: {e}", file=sys.stderr)
+
+    try:
+        for cluster in list_opensearch_clusters(sdk, folder_id):
+            nodes[cluster.name] = opensearch_cluster_to_node(cluster, folder_id)
+    except Exception as e:
+        print(f"WARNING: failed to list managed-opensearch clusters: {e}", file=sys.stderr)
 
     print(json.dumps(nodes, indent=2, ensure_ascii=False))
 

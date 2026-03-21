@@ -15,6 +15,7 @@ _yc_get_cmd() {
     managed-clickhouse)        echo "yc managed-clickhouse cluster get" ;;
     managed-mysql)             echo "yc managed-mysql cluster get" ;;
     managed-mongodb)           echo "yc managed-mongodb cluster get" ;;
+    managed-opensearch)        echo "yc managed-opensearch cluster get" ;;
     *) echo "Unknown resource type: $1" >&2; return 1 ;;
   esac
 }
