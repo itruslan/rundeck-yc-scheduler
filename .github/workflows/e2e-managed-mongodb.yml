@@ -1,4 +1,5 @@
 name: E2E / managed-mongodb
+run-name: "E2E / managed-mongodb [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_call:

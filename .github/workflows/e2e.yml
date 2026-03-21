@@ -1,4 +1,5 @@
 name: E2E Tests
+run-name: "E2E [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_dispatch:
@@ -49,6 +50,10 @@ on:
         default: false
       network_load_balancer:
         description: network-load-balancer
+        type: boolean
+        default: false
+      ydb:
+        description: ydb
         type: boolean
         default: false
 
@@ -126,6 +131,13 @@ jobs:
   network-load-balancer:
     if: ${{ inputs.network_load_balancer }}
     uses: ./.github/workflows/e2e-network-load-balancer.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
+  ydb:
+    if: ${{ inputs.ydb }}
+    uses: ./.github/workflows/e2e-ydb.yml
     with:
       image_tag: ${{ inputs.image_tag }}
     secrets: inherit

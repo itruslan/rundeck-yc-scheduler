@@ -51,6 +51,8 @@ from yandex.cloud.mdb.opensearch.v1 import (
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
+from yandex.cloud.ydb.v1 import database_service_pb2 as ydb_service_pb2
+from yandex.cloud.ydb.v1 import database_service_pb2_grpc as ydb_service_pb2_grpc
 from yc_common import (
     ALB_ACTIVE,
     ALB_STOPPED,
@@ -85,6 +87,8 @@ from yc_common import (
     REDIS_RUNNING,
     REDIS_STOPPED,
     REDIS_STOPPING,
+    YDB_RUNNING,
+    YDB_STOPPED,
     load_sdk_from_storage,
     wait_for_operation,
 )
@@ -290,6 +294,31 @@ def start_opensearch_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
     print(f"Cluster {cluster_id} started.")
 
 
+def start_ydb_database(sdk: yandexcloud.SDK, database_id: str) -> None:
+    svc = sdk.client(ydb_service_pb2_grpc.DatabaseServiceStub)
+
+    try:
+        database = svc.Get(ydb_service_pb2.GetDatabaseRequest(database_id=database_id))
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            print(f"Database {database_id} not found, skipping.")
+            return
+        raise
+    status = database.status
+
+    if status == YDB_RUNNING:
+        print(f"Database {database_id} is already running.")
+        return
+    if status != YDB_STOPPED:
+        print(f"Database {database_id} is in status {status}, skipping.")
+        return
+
+    print(f"Starting ydb database {database_id}...")
+    op = svc.Start(ydb_service_pb2.StartDatabaseRequest(database_id=database_id))
+    wait_for_operation(sdk, op.id, timeout=900)
+    print(f"Database {database_id} started.")
+
+
 def start_redis_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
     svc = sdk.client(redis_cluster_service_pb2_grpc.ClusterServiceStub)
 
@@ -405,6 +434,8 @@ def main() -> None:
                 start_nlb(sdk, args.id)
             case "application-load-balancer":
                 start_alb(sdk, args.id)
+            case "ydb":
+                start_ydb_database(sdk, args.id)
             case _:
                 print(f"ERROR: unsupported resource type: {args.type}", file=sys.stderr)
                 sys.exit(1)

@@ -107,7 +107,7 @@ sed "s/RESOURCE_TYPE/$RESOURCE_TYPE/g" jobs/start-RESOURCE_TYPE.yaml.tpl > "jobs
 **Generate jobs for all types at once:**
 
 ```bash
-for rt in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql managed-mongodb managed-opensearch; do
+for rt in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql managed-mongodb managed-opensearch ydb; do
   sed "s/RESOURCE_TYPE/$rt/g" jobs/stop-RESOURCE_TYPE.yaml.tpl > "jobs/stop-${rt}.yaml"
   sed "s/RESOURCE_TYPE/$rt/g" jobs/start-RESOURCE_TYPE.yaml.tpl > "jobs/start-${rt}.yaml"
 done

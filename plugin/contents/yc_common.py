@@ -91,6 +91,11 @@ OPENSEARCH_STOPPING = 5
 OPENSEARCH_STOPPED = 6
 OPENSEARCH_STARTING = 7
 
+# YDB database (Database.Status)
+YDB_RUNNING = 2
+YDB_STARTING = 7
+YDB_STOPPED = 8
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.

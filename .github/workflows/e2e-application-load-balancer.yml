@@ -1,4 +1,5 @@
 name: E2E / application-load-balancer
+run-name: "E2E / application-load-balancer [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_call:

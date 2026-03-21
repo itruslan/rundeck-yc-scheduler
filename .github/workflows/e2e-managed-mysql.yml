@@ -1,4 +1,5 @@
 name: E2E / managed-mysql
+run-name: "E2E / managed-mysql [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_call:

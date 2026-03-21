@@ -45,7 +45,8 @@ jobs:
               "managed-clickhouse":        {"enabled":true},
               "managed-mysql":             {"enabled":true},
               "managed-mongodb":           {"enabled":true},
-              "managed-opensearch":        {"enabled":true}
+              "managed-opensearch":        {"enabled":true},
+              "ydb":                       {"enabled":true}
             }
 
       - name: Prepare ID directory
@@ -331,6 +332,25 @@ jobs:
           yc managed-opensearch cluster get --name "$REPO-managed-opensearch-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
             | jq -r '.id' > /tmp/e2e/managed-opensearch.id
 
+      - name: Create YDB database
+        run: |
+          SUBNETS=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json)
+          NETWORK_ID=$(echo "$SUBNETS" | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          # YDB requires subnets in ALL zones present in the network
+          SUBNET_IDS=$(echo "$SUBNETS" | jq -r --arg net "$NETWORK_ID" '[.[] | select(.network_id==$net) | .id] | join(",")')
+          yc ydb database create "$REPO-ydb-$RUN_ID" \
+            --folder-id "$FOLDER_ID" \
+            --dedicated \
+            --network-id "$NETWORK_ID" \
+            --subnet-id "$SUBNET_IDS" \
+            --resource-preset small-m8 \
+            --storage type=ssd,groups=1 \
+            --fixed-size 1 \
+            --labels "for-test=true" \
+            --async
+          yc ydb database get --name "$REPO-ydb-$RUN_ID" --folder-id "$FOLDER_ID" --format json \
+            | jq -r '.id' > /tmp/e2e/ydb.id
+
       # ------------------------------------------------------------------
       # Phase 3: Wait RUNNING — all in parallel, fail-fast
       # ------------------------------------------------------------------
@@ -349,8 +369,9 @@ jobs:
           wait_running managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             60 15 &  P9=$!
           wait_running managed-mongodb           "$(cat /tmp/e2e/managed-mongodb.id)"           60 15 &  P10=$!
           wait_running managed-opensearch        "$(cat /tmp/e2e/managed-opensearch.id)"        60 15 &  P11=$!
+          wait_running ydb                       "$(cat /tmp/e2e/ydb.id)"                       60 15 &  P12=$!
 
-          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11 $P12
 
       # ------------------------------------------------------------------
       # Phase 4: Wait Rundeck nodes — all in parallel
@@ -370,8 +391,9 @@ jobs:
           uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-mysql.id)"             --timeout 180 &  P9=$!
           uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-mongodb.id)"           --timeout 180 &  P10=$!
           uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/managed-opensearch.id)"        --timeout 180 &  P11=$!
+          uv run tests/e2e/rundeck.py wait-node --project e2e --resource-id "$(cat /tmp/e2e/ydb.id)"                       --timeout 180 &  P12=$!
 
-          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11 $P12
 
       # ------------------------------------------------------------------
       # Phase 5+6: Backup — PG + MySQL only, trigger and wait in parallel
@@ -403,8 +425,9 @@ jobs:
           uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-mysql             --name Stop --resource-id "$(cat /tmp/e2e/managed-mysql.id)"             --timeout 600 &  P9=$!
           uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-mongodb           --name Stop --resource-id "$(cat /tmp/e2e/managed-mongodb.id)"           --timeout 600 &  P10=$!
           uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-opensearch        --name Stop --resource-id "$(cat /tmp/e2e/managed-opensearch.id)"        --timeout 600 &  P11=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/ydb                       --name Stop --resource-id "$(cat /tmp/e2e/ydb.id)"                       --timeout 600 &  P12=$!
 
-          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11 $P12
 
       # ------------------------------------------------------------------
       # Phase 8: Verify STOPPED — all in parallel
@@ -424,6 +447,7 @@ jobs:
           verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             STOPPED 40 15 &  P9=$!
           verify_status managed-mongodb           "$(cat /tmp/e2e/managed-mongodb.id)"           STOPPED 40 15 &  P10=$!
           verify_status managed-opensearch        "$(cat /tmp/e2e/managed-opensearch.id)"        STOPPED 40 15 &  P11=$!
+          verify_status ydb                       "$(cat /tmp/e2e/ydb.id)"                       STOPPED 40 15 &  P12=$!
 
           FAILED=0
           wait $P1;  [ $? -eq 0 ] && echo pass > /tmp/e2e/compute-instance.stop          || { echo fail > /tmp/e2e/compute-instance.stop;          FAILED=1; }
@@ -437,6 +461,7 @@ jobs:
           wait $P9;  [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-mysql.stop             || { echo fail > /tmp/e2e/managed-mysql.stop;             FAILED=1; }
           wait $P10; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-mongodb.stop           || { echo fail > /tmp/e2e/managed-mongodb.stop;           FAILED=1; }
           wait $P11; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-opensearch.stop        || { echo fail > /tmp/e2e/managed-opensearch.stop;        FAILED=1; }
+          wait $P12; [ $? -eq 0 ] && echo pass > /tmp/e2e/ydb.stop                       || { echo fail > /tmp/e2e/ydb.stop;                       FAILED=1; }
           [ $FAILED -eq 0 ]
 
       # ------------------------------------------------------------------
@@ -457,8 +482,9 @@ jobs:
           uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-mysql             --name Start --resource-id "$(cat /tmp/e2e/managed-mysql.id)"             --timeout 600 &  P9=$!
           uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-mongodb           --name Start --resource-id "$(cat /tmp/e2e/managed-mongodb.id)"           --timeout 600 &  P10=$!
           uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/managed-opensearch        --name Start --resource-id "$(cat /tmp/e2e/managed-opensearch.id)"        --timeout 600 &  P11=$!
+          uv run tests/e2e/rundeck.py run-job --project e2e --group e2e/ydb                       --name Start --resource-id "$(cat /tmp/e2e/ydb.id)"                       --timeout 600 &  P12=$!
 
-          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11
+          wait $P1 $P2 $P3 $P4 $P5 $P6 $P7 $P8 $P9 $P10 $P11 $P12
 
       # ------------------------------------------------------------------
       # Phase 10: Verify RUNNING — all in parallel
@@ -478,6 +504,7 @@ jobs:
           verify_status managed-mysql             "$(cat /tmp/e2e/managed-mysql.id)"             RUNNING 40 15 &  P9=$!
           verify_status managed-mongodb           "$(cat /tmp/e2e/managed-mongodb.id)"           RUNNING 40 15 &  P10=$!
           verify_status managed-opensearch        "$(cat /tmp/e2e/managed-opensearch.id)"        RUNNING 40 15 &  P11=$!
+          verify_status ydb                       "$(cat /tmp/e2e/ydb.id)"                       RUNNING 40 15 &  P12=$!
 
           FAILED=0
           wait $P1;  [ $? -eq 0 ] && echo pass > /tmp/e2e/compute-instance.start          || { echo fail > /tmp/e2e/compute-instance.start;          FAILED=1; }
@@ -491,6 +518,7 @@ jobs:
           wait $P9;  [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-mysql.start             || { echo fail > /tmp/e2e/managed-mysql.start;             FAILED=1; }
           wait $P10; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-mongodb.start           || { echo fail > /tmp/e2e/managed-mongodb.start;           FAILED=1; }
           wait $P11; [ $? -eq 0 ] && echo pass > /tmp/e2e/managed-opensearch.start        || { echo fail > /tmp/e2e/managed-opensearch.start;        FAILED=1; }
+          wait $P12; [ $? -eq 0 ] && echo pass > /tmp/e2e/ydb.start                       || { echo fail > /tmp/e2e/ydb.start;                       FAILED=1; }
           [ $FAILED -eq 0 ]
 
       # ------------------------------------------------------------------
@@ -500,7 +528,7 @@ jobs:
         if: always()
         run: |
           source tests/e2e/yc.sh
-          for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql managed-mongodb managed-opensearch; do
+          for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql managed-mongodb managed-opensearch ydb; do
             if [ -f "/tmp/e2e/$type.id" ]; then
               cmd=$(_yc_get_cmd "$type")
               STATUS=$($cmd --id "$(cat /tmp/e2e/$type.id)" --format json 2>/dev/null | jq -r '.status // "n/a"')
@@ -527,6 +555,7 @@ jobs:
           [ -f /tmp/e2e/managed-mysql.id ]             && yc managed-mysql cluster delete               --id "$(cat /tmp/e2e/managed-mysql.id)"             --async || true &
           [ -f /tmp/e2e/managed-mongodb.id ]           && yc managed-mongodb cluster delete             --id "$(cat /tmp/e2e/managed-mongodb.id)"           --async || true &
           [ -f /tmp/e2e/managed-opensearch.id ]        && yc managed-opensearch cluster delete          --id "$(cat /tmp/e2e/managed-opensearch.id)"        --async || true &
+          [ -f /tmp/e2e/ydb.id ]                       && yc ydb database delete                        --id "$(cat /tmp/e2e/ydb.id)"                       --async || true &
           wait
 
       - name: Cleanup - stop Rundeck
@@ -538,11 +567,11 @@ jobs:
         run: |
           echo "## E2E All Resources" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Image: \`${{ inputs.image_tag }}\`. Tested stop/start lifecycle for all 11 resource types in parallel." >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`${{ inputs.image_tag }}\`. Tested stop/start lifecycle for all 12 resource types in parallel." >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Resource | Stop | Start |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql managed-mongodb managed-opensearch; do
+          for type in compute-instance managed-postgresql managed-kubernetes network-load-balancer managed-kafka application-load-balancer managed-redis managed-clickhouse managed-mysql managed-mongodb managed-opensearch ydb; do
             stop=$(cat "/tmp/e2e/$type.stop"  2>/dev/null || echo "—")
             start=$(cat "/tmp/e2e/$type.start" 2>/dev/null || echo "—")
             [ "$stop"  = pass ] && stop_icon="✅"  || stop_icon="❌"

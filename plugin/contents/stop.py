@@ -51,6 +51,8 @@ from yandex.cloud.mdb.opensearch.v1 import (
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
+from yandex.cloud.ydb.v1 import database_service_pb2 as ydb_service_pb2
+from yandex.cloud.ydb.v1 import database_service_pb2_grpc as ydb_service_pb2_grpc
 from yc_common import (
     ALB_ACTIVE,
     ALB_STARTING,
@@ -85,6 +87,9 @@ from yc_common import (
     REDIS_RUNNING,
     REDIS_STARTING,
     REDIS_STOPPED,
+    YDB_RUNNING,
+    YDB_STARTING,
+    YDB_STOPPED,
     load_sdk_from_storage,
     wait_for_operation,
 )
@@ -373,6 +378,31 @@ def stop_alb(sdk: yandexcloud.SDK, alb_id: str) -> None:
     print(f"Application load balancer {alb_id} stopped.")
 
 
+def stop_ydb_database(sdk: yandexcloud.SDK, database_id: str) -> None:
+    svc = sdk.client(ydb_service_pb2_grpc.DatabaseServiceStub)
+
+    try:
+        database = svc.Get(ydb_service_pb2.GetDatabaseRequest(database_id=database_id))
+    except grpc.RpcError as exc:
+        if exc.code() == grpc.StatusCode.NOT_FOUND:
+            print(f"Database {database_id} not found, skipping.")
+            return
+        raise
+    status = database.status
+
+    if status == YDB_STOPPED:
+        print(f"Database {database_id} is already stopped.")
+        return
+    if status not in (YDB_RUNNING, YDB_STARTING):
+        print(f"Database {database_id} is in status {status}, skipping.")
+        return
+
+    print(f"Stopping ydb database {database_id}...")
+    op = svc.Stop(ydb_service_pb2.StopDatabaseRequest(database_id=database_id))
+    wait_for_operation(sdk, op.id)
+    print(f"Database {database_id} stopped.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--type", required=True, help="Resource type (e.g. compute-instance)")
@@ -405,6 +435,8 @@ def main() -> None:
                 stop_nlb(sdk, args.id)
             case "application-load-balancer":
                 stop_alb(sdk, args.id)
+            case "ydb":
+                stop_ydb_database(sdk, args.id)
             case _:
                 print(f"ERROR: unsupported resource type: {args.type}", file=sys.stderr)
                 sys.exit(1)

@@ -48,6 +48,8 @@ from yandex.cloud.mdb.opensearch.v1 import (
 from yandex.cloud.mdb.postgresql.v1 import cluster_service_pb2, cluster_service_pb2_grpc
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2 as redis_cluster_service_pb2
 from yandex.cloud.mdb.redis.v1 import cluster_service_pb2_grpc as redis_cluster_service_pb2_grpc
+from yandex.cloud.ydb.v1 import database_service_pb2 as ydb_service_pb2
+from yandex.cloud.ydb.v1 import database_service_pb2_grpc as ydb_service_pb2_grpc
 from yc_common import load_sdk_from_storage
 
 # YC automatically names Kubernetes worker nodes as: 20 chars + dash + 4 chars.
@@ -179,6 +181,17 @@ _OPENSEARCH_STATUSES = {
     5: "STOPPING",
     6: "STOPPED",
     7: "STARTING",
+}
+
+_YDB_STATUSES = {
+    0: "STATUS_UNSPECIFIED",
+    1: "PROVISIONING",
+    2: "RUNNING",
+    4: "UPDATING",
+    5: "ERROR",
+    6: "DELETING",
+    7: "STARTING",
+    8: "STOPPED",
 }
 
 
@@ -369,6 +382,16 @@ def opensearch_cluster_to_node(cluster: Any, folder_id: str) -> dict:
     return _to_node(cluster, "managed-opensearch", cluster.status, _OPENSEARCH_STATUSES, folder_id)
 
 
+def list_ydb_databases(sdk: yandexcloud.SDK, folder_id: str) -> list:
+    svc = sdk.client(ydb_service_pb2_grpc.DatabaseServiceStub)
+    return _paginate(svc.List, ydb_service_pb2.ListDatabasesRequest, "databases", folder_id)
+
+
+def ydb_database_to_node(database: Any, folder_id: str) -> dict:
+    """Convert a YC YDB database to Rundeck node format."""
+    return _to_node(database, "ydb", database.status, _YDB_STATUSES, folder_id)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -456,6 +479,12 @@ def main() -> None:
             nodes[cluster.name] = opensearch_cluster_to_node(cluster, folder_id)
     except Exception as e:
         print(f"WARNING: failed to list managed-opensearch clusters: {e}", file=sys.stderr)
+
+    try:
+        for database in list_ydb_databases(sdk, folder_id):
+            nodes[database.name] = ydb_database_to_node(database, folder_id)
+    except Exception as e:
+        print(f"WARNING: failed to list ydb databases: {e}", file=sys.stderr)
 
     print(json.dumps(nodes, indent=2, ensure_ascii=False))
 
