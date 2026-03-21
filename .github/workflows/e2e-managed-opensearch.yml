@@ -1,4 +1,5 @@
 name: E2E / managed-opensearch
+run-name: "E2E / managed-opensearch [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_call:

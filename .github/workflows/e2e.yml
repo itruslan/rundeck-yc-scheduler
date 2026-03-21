@@ -1,4 +1,5 @@
 name: E2E Tests
+run-name: "E2E [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_dispatch:

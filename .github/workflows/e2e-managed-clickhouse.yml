@@ -1,4 +1,5 @@
 name: E2E / managed-clickhouse
+run-name: "E2E / managed-clickhouse [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_call:

@@ -1,4 +1,5 @@
 name: E2E / ydb
+run-name: "E2E / ydb [${{ inputs.image_tag }}] by @${{ github.actor }}"
 
 on:
   workflow_call:
