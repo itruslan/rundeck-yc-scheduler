@@ -48,12 +48,14 @@ jobs:
           NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
             | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
           echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
+          VERSION=$(yc managed-opensearch version list --format json | jq -r '[.[].id] | sort | last')
+          echo "Using OpenSearch version: $VERSION"
           yc managed-opensearch cluster create \
             --name "$CLUSTER_NAME" \
             --folder-id "$FOLDER_ID" \
             --network-id "$NETWORK_ID" \
             --environment prestable \
-            --version 2.18 \
+            --version "$VERSION" \
             --admin-password "E2eTestPass1!" \
             --opensearch-node-group "name=opensearch,resource-preset-id=c3-c2-m4,disk-size=10737418240,disk-type-id=network-ssd,hosts-count=1,zone-ids=$ZONE,subnet-ids=$SUBNET_ID" \
             --labels "for-test=true" \
