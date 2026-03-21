@@ -51,7 +51,7 @@ All operations are idempotent — resources already in the target state are skip
 | `managed-clickhouse` | ✅ done | 0.5.0 |
 | `managed-mysql` | ✅ done | 0.6.0 |
 | `managed-mongodb` | ✅ done | 0.7.0 |
-| `managed-opensearch` | 🔜 planned | — |
+| `managed-opensearch` | ✅ done | 0.8.0 |
 | `ydb` | 🔜 planned | — |
 
 ## Quick start

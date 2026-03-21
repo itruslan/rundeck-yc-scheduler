@@ -35,6 +35,10 @@ on:
         description: managed-mysql
         type: boolean
         default: false
+      managed_opensearch:
+        description: managed-opensearch
+        type: boolean
+        default: false
       managed_postgresql:
         description: managed-postgresql
         type: boolean
@@ -87,6 +91,13 @@ jobs:
   managed-mongodb:
     if: ${{ inputs.managed_mongodb }}
     uses: ./.github/workflows/e2e-managed-mongodb.yml
+    with:
+      image_tag: ${{ inputs.image_tag }}
+    secrets: inherit
+
+  managed-opensearch:
+    if: ${{ inputs.managed_opensearch }}
+    uses: ./.github/workflows/e2e-managed-opensearch.yml
     with:
       image_tag: ${{ inputs.image_tag }}
     secrets: inherit

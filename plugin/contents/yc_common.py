@@ -85,6 +85,12 @@ MONGODB_STOPPING = 5
 MONGODB_STOPPED = 6
 MONGODB_STARTING = 7
 
+# Managed OpenSearch cluster (Cluster.Status)
+OPENSEARCH_RUNNING = 2
+OPENSEARCH_STOPPING = 5
+OPENSEARCH_STOPPED = 6
+OPENSEARCH_STARTING = 7
+
 
 def load_sdk_from_storage() -> yandexcloud.SDK:
     """Load Yandex Cloud SDK from RD_CONFIG_YC_SA_KEY env var.
