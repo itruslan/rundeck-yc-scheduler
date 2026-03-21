@@ -315,7 +315,7 @@ def start_ydb_database(sdk: yandexcloud.SDK, database_id: str) -> None:
 
     print(f"Starting ydb database {database_id}...")
     op = svc.Start(ydb_service_pb2.StartDatabaseRequest(database_id=database_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=900)
     print(f"Database {database_id} started.")
 
 
