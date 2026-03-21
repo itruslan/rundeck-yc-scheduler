@@ -334,15 +334,15 @@ jobs:
 
       - name: Create YDB database
         run: |
-          SUBNET_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
-            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].id')
-          NETWORK_ID=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json \
-            | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          SUBNETS=$(yc vpc subnet list --folder-id "$FOLDER_ID" --format json)
+          NETWORK_ID=$(echo "$SUBNETS" | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
+          # YDB requires subnets in ALL zones present in the network
+          SUBNET_IDS=$(echo "$SUBNETS" | jq -r --arg net "$NETWORK_ID" '[.[] | select(.network_id==$net) | .id] | join(",")')
           yc ydb database create "$REPO-ydb-$RUN_ID" \
             --folder-id "$FOLDER_ID" \
-            --zone "$ZONE" \
+            --dedicated \
             --network-id "$NETWORK_ID" \
-            --subnet-id "$SUBNET_ID" \
+            --subnet-id "$SUBNET_IDS" \
             --resource-preset small-m8 \
             --storage type=ssd,groups=1 \
             --fixed-size 1 \
