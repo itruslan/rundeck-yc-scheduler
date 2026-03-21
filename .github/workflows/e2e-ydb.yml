@@ -50,7 +50,7 @@ jobs:
           echo "Using subnet: $SUBNET_ID, network: $NETWORK_ID"
           yc ydb database create "$DB_NAME" \
             --folder-id "$FOLDER_ID" \
-            --dedicated \
+            --zone "$ZONE" \
             --network-id "$NETWORK_ID" \
             --subnet-id "$SUBNET_ID" \
             --resource-preset small-m8 \

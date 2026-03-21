@@ -340,7 +340,7 @@ jobs:
             | jq -r --arg zone "$ZONE" '[.[] | select(.zone_id==$zone)][0].network_id')
           yc ydb database create "$REPO-ydb-$RUN_ID" \
             --folder-id "$FOLDER_ID" \
-            --dedicated \
+            --zone "$ZONE" \
             --network-id "$NETWORK_ID" \
             --subnet-id "$SUBNET_ID" \
             --resource-preset small-m8 \
