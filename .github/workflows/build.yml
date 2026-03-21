@@ -1,4 +1,5 @@
 name: Build
+run-name: "Build [${{ github.head_ref || github.ref_name }}] by @${{ github.actor }}"
 
 on:
   push:

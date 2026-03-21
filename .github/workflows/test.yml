@@ -1,4 +1,5 @@
 name: Test
+run-name: "Test [${{ github.head_ref || github.ref_name }}] by @${{ github.actor }}"
 
 on:
   push:
