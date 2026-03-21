@@ -73,6 +73,7 @@ variable "projects" {
       stop_schedule_override  = optional(string)
       start_schedule_override = optional(string)
       stop_order              = optional(number, 1)
+      operation_timeout       = optional(number, 300)
     })), {})
   }))
 

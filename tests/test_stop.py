@@ -63,7 +63,18 @@ class TestStopComputeInstance:
         stop.stop_compute_instance(mock_sdk, "inst-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
+
+    def test_custom_timeout_is_passed(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=COMPUTE_RUNNING)
+        svc.Stop.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("stop.wait_for_operation")
+
+        stop.stop_compute_instance(mock_sdk, "inst-id", timeout=600)
+
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=600)
 
     def test_stops_starting_instance(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -123,7 +134,7 @@ class TestStopPgCluster:
         stop.stop_pg_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_not_found_skips(self, mock_sdk):
         svc = MagicMock()
@@ -163,6 +174,17 @@ class TestStopK8sCluster:
         stop.stop_k8s_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
+
+    def test_custom_timeout_is_passed(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=K8S_RUNNING)
+        svc.Stop.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("stop.wait_for_operation")
+
+        stop.stop_k8s_cluster(mock_sdk, "cluster-id", timeout=900)
+
         mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=900)
 
     def test_not_found_skips(self, mock_sdk):
@@ -203,7 +225,7 @@ class TestStopKafkaCluster:
         stop.stop_kafka_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_stops_starting_cluster(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -254,7 +276,7 @@ class TestStopNlb:
         stop.stop_nlb(mock_sdk, "nlb-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_not_found_skips(self, mock_sdk):
         svc = MagicMock()
@@ -294,7 +316,7 @@ class TestStopAlb:
         stop.stop_alb(mock_sdk, "alb-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_stops_starting_alb(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -354,7 +376,7 @@ class TestStopClickhouseCluster:
         stop.stop_clickhouse_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_stops_starting_cluster(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -405,7 +427,7 @@ class TestStopRedisCluster:
         stop.stop_redis_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_stops_starting_cluster(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -456,7 +478,7 @@ class TestStopMysqlCluster:
         stop.stop_mysql_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_stops_starting_cluster(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -507,7 +529,7 @@ class TestStopMongodbCluster:
         stop.stop_mongodb_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_stops_starting_cluster(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -558,7 +580,7 @@ class TestStopOpensearchCluster:
         stop.stop_opensearch_cluster(mock_sdk, "cluster-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
 
     def test_stops_starting_cluster(self, mock_sdk, mocker):
         svc = MagicMock()
@@ -609,7 +631,18 @@ class TestStopYdbDatabase:
         stop.stop_ydb_database(mock_sdk, "db-id")
 
         svc.Stop.assert_called_once()
-        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=300)
+
+    def test_custom_timeout_is_passed(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=YDB_RUNNING)
+        svc.Stop.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("stop.wait_for_operation")
+
+        stop.stop_ydb_database(mock_sdk, "db-id", timeout=900)
+
+        mock_wait.assert_called_once_with(mock_sdk, "op-1", timeout=900)
 
     def test_stops_starting_database(self, mock_sdk, mocker):
         svc = MagicMock()

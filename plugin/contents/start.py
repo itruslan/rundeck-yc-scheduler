@@ -94,7 +94,7 @@ from yc_common import (
 )
 
 
-def start_compute_instance(sdk: yandexcloud.SDK, instance_id: str) -> None:
+def start_compute_instance(sdk: yandexcloud.SDK, instance_id: str, timeout: int = 300) -> None:
     svc = sdk.client(instance_service_pb2_grpc.InstanceServiceStub)
 
     try:
@@ -115,11 +115,11 @@ def start_compute_instance(sdk: yandexcloud.SDK, instance_id: str) -> None:
 
     print(f"Starting compute instance {instance_id}...")
     op = svc.Start(instance_service_pb2.StartInstanceRequest(instance_id=instance_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Instance {instance_id} started.")
 
 
-def start_clickhouse_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_clickhouse_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(ch_cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -140,11 +140,11 @@ def start_clickhouse_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-clickhouse cluster {cluster_id}...")
     op = svc.Start(ch_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_pg_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_pg_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -165,11 +165,11 @@ def start_pg_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-postgresql cluster {cluster_id}...")
     op = svc.Start(cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_k8s_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_k8s_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(k8s_cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -190,11 +190,11 @@ def start_k8s_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-kubernetes cluster {cluster_id}...")
     op = svc.Start(k8s_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id, timeout=900)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_kafka_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_kafka_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(kafka_cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -215,11 +215,11 @@ def start_kafka_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-kafka cluster {cluster_id}...")
     op = svc.Start(kafka_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_mysql_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_mysql_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(mysql_cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -240,11 +240,11 @@ def start_mysql_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-mysql cluster {cluster_id}...")
     op = svc.Start(mysql_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_mongodb_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_mongodb_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(mongodb_cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -265,11 +265,11 @@ def start_mongodb_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-mongodb cluster {cluster_id}...")
     op = svc.Start(mongodb_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_opensearch_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_opensearch_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(opensearch_cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -290,11 +290,11 @@ def start_opensearch_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-opensearch cluster {cluster_id}...")
     op = svc.Start(opensearch_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_ydb_database(sdk: yandexcloud.SDK, database_id: str) -> None:
+def start_ydb_database(sdk: yandexcloud.SDK, database_id: str, timeout: int = 300) -> None:
     svc = sdk.client(ydb_service_pb2_grpc.DatabaseServiceStub)
 
     try:
@@ -315,11 +315,11 @@ def start_ydb_database(sdk: yandexcloud.SDK, database_id: str) -> None:
 
     print(f"Starting ydb database {database_id}...")
     op = svc.Start(ydb_service_pb2.StartDatabaseRequest(database_id=database_id))
-    wait_for_operation(sdk, op.id, timeout=900)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Database {database_id} started.")
 
 
-def start_redis_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
+def start_redis_cluster(sdk: yandexcloud.SDK, cluster_id: str, timeout: int = 300) -> None:
     svc = sdk.client(redis_cluster_service_pb2_grpc.ClusterServiceStub)
 
     try:
@@ -340,11 +340,11 @@ def start_redis_cluster(sdk: yandexcloud.SDK, cluster_id: str) -> None:
 
     print(f"Starting managed-redis cluster {cluster_id}...")
     op = svc.Start(redis_cluster_service_pb2.StartClusterRequest(cluster_id=cluster_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Cluster {cluster_id} started.")
 
 
-def start_nlb(sdk: yandexcloud.SDK, nlb_id: str) -> None:
+def start_nlb(sdk: yandexcloud.SDK, nlb_id: str, timeout: int = 300) -> None:
     svc = sdk.client(network_load_balancer_service_pb2_grpc.NetworkLoadBalancerServiceStub)
 
     try:
@@ -373,11 +373,11 @@ def start_nlb(sdk: yandexcloud.SDK, nlb_id: str) -> None:
             network_load_balancer_id=nlb_id
         )
     )
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Network load balancer {nlb_id} started.")
 
 
-def start_alb(sdk: yandexcloud.SDK, alb_id: str) -> None:
+def start_alb(sdk: yandexcloud.SDK, alb_id: str, timeout: int = 300) -> None:
     svc = sdk.client(alb_service_pb2_grpc.LoadBalancerServiceStub)
 
     try:
@@ -398,7 +398,7 @@ def start_alb(sdk: yandexcloud.SDK, alb_id: str) -> None:
 
     print(f"Starting application load balancer {alb_id}...")
     op = svc.Start(alb_service_pb2.StartLoadBalancerRequest(load_balancer_id=alb_id))
-    wait_for_operation(sdk, op.id)
+    wait_for_operation(sdk, op.id, timeout=timeout)
     print(f"Application load balancer {alb_id} started.")
 
 
@@ -406,6 +406,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--type", required=True, help="Resource type (e.g. compute-instance)")
     parser.add_argument("--id", required=True, help="Resource ID")
+    parser.add_argument("--timeout", type=int, default=300, help="Operation timeout in seconds")
     args = parser.parse_args()
 
     sdk = load_sdk_from_storage()
@@ -413,29 +414,29 @@ def main() -> None:
     try:
         match args.type:
             case "compute-instance":
-                start_compute_instance(sdk, args.id)
+                start_compute_instance(sdk, args.id, timeout=args.timeout)
             case "managed-postgresql":
-                start_pg_cluster(sdk, args.id)
+                start_pg_cluster(sdk, args.id, timeout=args.timeout)
             case "managed-kubernetes":
-                start_k8s_cluster(sdk, args.id)
+                start_k8s_cluster(sdk, args.id, timeout=args.timeout)
             case "managed-kafka":
-                start_kafka_cluster(sdk, args.id)
+                start_kafka_cluster(sdk, args.id, timeout=args.timeout)
             case "managed-clickhouse":
-                start_clickhouse_cluster(sdk, args.id)
+                start_clickhouse_cluster(sdk, args.id, timeout=args.timeout)
             case "managed-mongodb":
-                start_mongodb_cluster(sdk, args.id)
+                start_mongodb_cluster(sdk, args.id, timeout=args.timeout)
             case "managed-opensearch":
-                start_opensearch_cluster(sdk, args.id)
+                start_opensearch_cluster(sdk, args.id, timeout=args.timeout)
             case "managed-mysql":
-                start_mysql_cluster(sdk, args.id)
+                start_mysql_cluster(sdk, args.id, timeout=args.timeout)
             case "managed-redis":
-                start_redis_cluster(sdk, args.id)
+                start_redis_cluster(sdk, args.id, timeout=args.timeout)
             case "network-load-balancer":
-                start_nlb(sdk, args.id)
+                start_nlb(sdk, args.id, timeout=args.timeout)
             case "application-load-balancer":
-                start_alb(sdk, args.id)
+                start_alb(sdk, args.id, timeout=args.timeout)
             case "ydb":
-                start_ydb_database(sdk, args.id)
+                start_ydb_database(sdk, args.id, timeout=args.timeout)
             case _:
                 print(f"ERROR: unsupported resource type: {args.type}", file=sys.stderr)
                 sys.exit(1)

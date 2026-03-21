@@ -5,16 +5,17 @@ locals {
   all_jobs = flatten([
     for p in var.projects : [
       for op in ["stop", "start"] : {
-        key              = "${p.name}/all/${op}"
-        project_name     = p.name
-        op               = op
-        display_name     = op == "stop" ? "Stop All" : "Start All"
-        group_name       = null
-        node_filter      = "resource_type: .*"
-        schedule         = null
-        schedule_enabled = false
-        time_zone        = null
-        stop_order       = null
+        key               = "${p.name}/all/${op}"
+        project_name      = p.name
+        op                = op
+        display_name      = op == "stop" ? "Stop All" : "Start All"
+        group_name        = null
+        node_filter       = "resource_type: .*"
+        schedule          = null
+        schedule_enabled  = false
+        time_zone         = null
+        stop_order        = null
+        operation_timeout = 300
       }
     ]
   ])
@@ -25,16 +26,17 @@ locals {
     for p in var.projects : [
       for rt_name, rt in p.resource_types : [
         for op in ["stop", "start"] : {
-          key              = "${p.name}/${rt_name}/${op}"
-          project_name     = p.name
-          op               = op
-          display_name     = op == "stop" ? "Stop" : "Start"
-          group_name       = "${p.name}/${rt_name}"
-          node_filter      = "resource_type: ${rt_name}"
-          schedule         = op == "stop" ? (rt.stop_schedule_override != null ? rt.stop_schedule_override : p.stop_schedule) : (rt.start_schedule_override != null ? rt.start_schedule_override : p.start_schedule)
-          schedule_enabled = op == "stop" ? (rt.stop_schedule_override != null ? rt.stop_schedule_override : p.stop_schedule) != null : (rt.start_schedule_override != null ? rt.start_schedule_override : p.start_schedule) != null
-          time_zone        = p.time_zone
-          stop_order       = rt.stop_order
+          key               = "${p.name}/${rt_name}/${op}"
+          project_name      = p.name
+          op                = op
+          display_name      = op == "stop" ? "Stop" : "Start"
+          group_name        = "${p.name}/${rt_name}"
+          node_filter       = "resource_type: ${rt_name}"
+          schedule          = op == "stop" ? (rt.stop_schedule_override != null ? rt.stop_schedule_override : p.stop_schedule) : (rt.start_schedule_override != null ? rt.start_schedule_override : p.start_schedule)
+          schedule_enabled  = op == "stop" ? (rt.stop_schedule_override != null ? rt.stop_schedule_override : p.stop_schedule) != null : (rt.start_schedule_override != null ? rt.start_schedule_override : p.start_schedule) != null
+          time_zone         = p.time_zone
+          stop_order        = rt.stop_order
+          operation_timeout = rt.operation_timeout
         } if rt.enabled
       ]
     ]
@@ -107,7 +109,8 @@ resource "rundeck_job" "this" {
     node_step_plugin {
       type = "yc-${each.value.op}"
       config = {
-        yc_sa_key = "keys/project/${each.value.project_name}/yc-sa-key"
+        yc_sa_key         = "keys/project/${each.value.project_name}/yc-sa-key"
+        operation_timeout = tostring(each.value.operation_timeout)
       }
     }
   }
