@@ -16,6 +16,7 @@ _yc_get_cmd() {
     managed-mysql)             echo "yc managed-mysql cluster get" ;;
     managed-mongodb)           echo "yc managed-mongodb cluster get" ;;
     managed-opensearch)        echo "yc managed-opensearch cluster get" ;;
+    ydb)                       echo "yc ydb database get" ;;
     *) echo "Unknown resource type: $1" >&2; return 1 ;;
   esac
 }

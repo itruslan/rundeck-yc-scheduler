@@ -161,6 +161,21 @@ class TestOpensearchClusterToNode:
         assert node["status"] == "RUNNING"
 
 
+class TestYdbDatabaseToNode:
+    def test_output_running(self):
+        database = _make_resource(name="ydb-prod", id="ydb-1", status=2)
+        node = node_source.ydb_database_to_node(database, "folder-1")
+
+        assert node["resource_type"] == "ydb"
+        assert node["status"] == "RUNNING"
+
+    def test_output_stopped(self):
+        database = _make_resource(name="ydb-dev", id="ydb-2", status=8)
+        node = node_source.ydb_database_to_node(database, "folder-1")
+
+        assert node["status"] == "STOPPED"
+
+
 class TestK8sNodeFilter:
     """K8S worker nodes (auto-named) must be excluded from the node list."""
 
@@ -190,6 +205,7 @@ class TestK8sNodeFilter:
         mocker.patch("node_source.list_mysql_clusters", return_value=[])
         mocker.patch("node_source.list_mongodb_clusters", return_value=[])
         mocker.patch("node_source.list_opensearch_clusters", return_value=[])
+        mocker.patch("node_source.list_ydb_databases", return_value=[])
 
         node_source.main()
 

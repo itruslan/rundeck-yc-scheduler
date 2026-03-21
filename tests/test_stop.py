@@ -37,6 +37,9 @@ from yc_common import (
     REDIS_RUNNING,
     REDIS_STARTING,
     REDIS_STOPPED,
+    YDB_RUNNING,
+    YDB_STARTING,
+    YDB_STOPPED,
 )
 
 
@@ -584,3 +587,54 @@ class TestStopOpensearchCluster:
 
         with pytest.raises(grpc.RpcError):
             stop.stop_opensearch_cluster(mock_sdk, "cluster-id")
+
+
+class TestStopYdbDatabase:
+    def test_already_stopped_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=YDB_STOPPED)
+        mock_sdk.client.return_value = svc
+
+        stop.stop_ydb_database(mock_sdk, "db-id")
+
+        svc.Stop.assert_not_called()
+
+    def test_stops_running_database(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=YDB_RUNNING)
+        svc.Stop.return_value = MagicMock(id="op-1")
+        mock_sdk.client.return_value = svc
+        mock_wait = mocker.patch("stop.wait_for_operation")
+
+        stop.stop_ydb_database(mock_sdk, "db-id")
+
+        svc.Stop.assert_called_once()
+        mock_wait.assert_called_once_with(mock_sdk, "op-1")
+
+    def test_stops_starting_database(self, mock_sdk, mocker):
+        svc = MagicMock()
+        svc.Get.return_value = MagicMock(status=YDB_STARTING)
+        svc.Stop.return_value = MagicMock(id="op-2")
+        mock_sdk.client.return_value = svc
+        mocker.patch("stop.wait_for_operation")
+
+        stop.stop_ydb_database(mock_sdk, "db-id")
+
+        svc.Stop.assert_called_once()
+
+    def test_not_found_skips(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.NOT_FOUND)
+        mock_sdk.client.return_value = svc
+
+        stop.stop_ydb_database(mock_sdk, "db-id")
+
+        svc.Stop.assert_not_called()
+
+    def test_other_rpc_error_raises(self, mock_sdk):
+        svc = MagicMock()
+        svc.Get.side_effect = rpc_error(grpc.StatusCode.UNAVAILABLE)
+        mock_sdk.client.return_value = svc
+
+        with pytest.raises(grpc.RpcError):
+            stop.stop_ydb_database(mock_sdk, "db-id")
