@@ -1,5 +1,5 @@
 # hadolint global ignore=DL3008,DL3013
-ARG RUNDECK_VERSION=5.19.0
+ARG RUNDECK_VERSION=5.20.0
 
 FROM rundeck/rundeck:${RUNDECK_VERSION}
 
